@@ -1,0 +1,49 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Runtime uploads, generated files, and logs
+uploads/
+output/
+tmp/
+tmp_*/
+tmp_ai_crime_doc_render/
+*.log
+*.err
+*.db
+*.sqlite
+*.sqlite3
+
+# Local datasets and model/source caches (large or separately licensed)
+source_cache/
+测试数据/
+验收测试集/
+涉谣/
+评测结果/
+casia1.zip
+deepfake_face_test.zip
+deepfake_face_tree.json
+
+# Local-only tools, snapshots, and unrelated artifacts
+.codex-tmp/
+.tmp_dsh_dump.txt
+.dsh-vision-router/
+.work_mentor_ppt/
+dsh-dafeiyu/
+软件界面截图/
+
+# Temporary diagnostics and deployment helpers
+_check_server.py
+_debug_wm.py
+_deploy.py
+_deploy_fix.py
+_fix_restart.py
+_push_npr.py
+_status.py
+_test_watermark.py
+tamper_eval_full.json

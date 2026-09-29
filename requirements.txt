@@ -1,0 +1,12 @@
+# Compatible with Windows Server 2016, Python 3.7/3.8/3.9 recommended
+Flask==2.0.3
+Werkzeug==2.0.3
+torch>=1.10.0
+torchvision>=0.11.0
+openai-clip>=1.0.1
+easyocr>=1.7.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+scipy>=1.7.0
+# 官方 C2PA SDK：验证 Content Credentials 的 Manifest、签名、文件绑定与信任状态
+c2pa-python>=0.37.8; python_version >= "3.10"
