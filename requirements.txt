@@ -8,5 +8,8 @@ easyocr>=1.7.0
 numpy>=1.21.0
 opencv-python>=4.5.0
 scipy>=1.7.0
+requests>=2.31.0
+pymysql>=1.1.0
+paramiko>=3.4.0
 # 官方 C2PA SDK：验证 Content Credentials 的 Manifest、签名、文件绑定与信任状态
 c2pa-python>=0.37.8; python_version >= "3.10"

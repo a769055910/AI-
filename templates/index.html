@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 伪造鉴别智能体</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20260929-reconstructed-v1') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='20261008-model-removal-v21') }}">
 </head>
 <body>
 <section class="landing-page" id="landing-page" aria-label="探真 AI 伪造检测首页">
@@ -76,7 +76,13 @@
         <form id="detect-form" data-type="image" enctype="multipart/form-data">
             <div class="detect-card">
                 <section class="upload-section" id="upload-section">
-                    <div class="upload-section-heading"><h2>选择鉴定图片</h2><p>单张图片执行单次检测；选择多张图片将创建批量鉴定任务</p></div>
+                    <div class="upload-toolbar">
+                        <label class="upload-file-button" for="file-input">↑ 上传文件</label>
+                        <div class="upload-url-control">
+                            <input type="text" id="image-url-input" placeholder="请输入图片地址，多个请用逗号或分号分隔" autocomplete="off">
+                            <button type="button" id="image-url-import" disabled>导入</button>
+                        </div>
+                    </div>
                     <label class="upload-area" id="upload-area" for="file-input" tabindex="0">
                         <input type="file" id="file-input" name="file" accept=".jpg,.jpeg,.png,.bmp,.webp" multiple>
                         <span class="upload-icon" aria-hidden="true">▧</span>
@@ -88,36 +94,31 @@
                     <div class="upload-error" id="upload-error" role="alert" hidden></div>
 
                     <section class="model-selection-section">
-                        <div class="section-heading"><h3>检测模型</h3><span id="upload-models-status">已选 3 项联合检测</span></div>
+                        <div class="section-heading"><div class="model-heading-copy"><h3>检测模型</h3><span>至少选择一项</span><span class="model-heading-note">ⓘ 备注：所有检测样本均进行 AI 标识检测</span></div><label class="select-all-models"><input type="checkbox" id="select-all-models" checked> 全选</label><span id="upload-models-status">已选 3 项联合检测</span></div>
                         <div class="upload-model-grid" id="single-models">
                             <label class="upload-model-card is-selected"><input class="upload-model-input" type="checkbox" name="models" value="ai_generated" checked><span class="upload-model-check">✓</span><div><h3>图像 AI 生成检测</h3><p>识别 AI 全图生成与合成痕迹</p></div></label>
                             <label class="upload-model-card is-selected"><input class="upload-model-input" type="checkbox" name="models" value="deepfake" checked><span class="upload-model-check">✓</span><div><h3>人脸深度合成检测</h3><p>检测换脸、人脸伪造与深度合成</p></div></label>
                             <label class="upload-model-card is-selected"><input class="upload-model-input" type="checkbox" name="models" value="tamper" checked><span class="upload-model-check">✓</span><div><h3>图像 PS 篡改检测</h3><p>识别局部拼接、复制与篡改痕迹</p></div></label>
                         </div>
                     </section>
-                    <section class="crime-scene-section">
-                        <div class="section-heading"><h3>犯罪场景（可选）</h3><span id="crime-scenes-status">未选择：仅鉴别 AI 生成</span></div>
+                    <section class="crime-scene-section" id="crime-scene-section">
+                        <div class="crime-scene-heading"><strong>犯罪场景（可选）</strong><span id="crime-scenes-status">未选择</span></div>
                         <div class="upload-model-grid crime-scene-grid">
-                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="crime_scene" value="fraud"><span class="upload-model-check">✓</span><div><h3>涉诈图片</h3><p>虚假凭证、收付款与引流话术</p></div></label>
-                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="crime_scene" value="pornography"><span class="upload-model-check">✓</span><div><h3>涉黄图片</h3><p>不雅内容冒充、敲诈与名誉侵害</p></div></label>
-                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="crime_scene" value="rumor"><span class="upload-model-check">✓</span><div><h3>涉谣图片</h3><p>灾情警情与虚假通报线索</p></div></label>
+                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="crime_scene" value="fraud"><span class="upload-model-check">✓</span><div><h3>涉诈图片</h3><p>虚假凭证、收付款与引流话术</p></div></label>
+                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="crime_scene" value="pornography"><span class="upload-model-check">✓</span><div><h3>涉黄图片</h3><p>不雅内容冒充、敲诈与名誉侵害</p></div></label>
+                            <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="crime_scene" value="rumor"><span class="upload-model-check">✓</span><div><h3>涉谣图片</h3><p>灾情警情与虚假通报线索</p></div></label>
                         </div>
                     </section>
                     <div class="action-bar"><button type="submit" class="btn btn-primary detect-btn" id="detect-btn" disabled>开始检测</button></div>
                 </section>
 
                 <section class="result-section" id="result-section" style="display:none;">
-                    <div class="result-summary">
-                        <div class="result-badge" id="result-badge"><svg id="badge-svg" viewBox="0 0 24 24" aria-hidden="true"></svg><span id="badge-label">检测结果</span></div>
-                        <span id="badge-score">置信度 --</span>
-                        <button type="button" class="btn btn-default" id="retry-btn" style="display:none;">重新鉴定</button>
-                        <button type="button" class="btn btn-default" id="process-btn" style="display:none;">检测过程</button>
-                    </div>
                     <div class="result-workspace-grid">
                         <div class="image-result-card">
                             <nav class="image-view-tabs" aria-label="图像结果视图">
                                 <button type="button" class="image-view-tab active" id="image-tab-inspection" aria-selected="true">图像检测</button>
                                 <button type="button" class="image-view-tab" id="image-tab-ai-code" aria-selected="false">AI 标识核验</button>
+                                <button type="button" class="btn btn-default result-retry-button" id="retry-btn" style="display:none;">重新鉴定</button>
                             </nav>
                             <div class="image-preview-view" id="image-preview-view">
                                 <div class="preview-container" id="preview-container"></div>
@@ -130,48 +131,31 @@
                             </section>
                         </div>
                         <div class="result-analysis-column">
-                            <div id="resultSection"><div id="previewContainer"></div></div>
-                            <section class="combined-result-card" id="combined-section" style="display:none;">
-                                <div class="combined-heading"><span id="combined-badge">综合判定</span><span id="combined-score">--</span></div><p id="combined-subtitle"></p><h3 id="combined-verdict">等待结果</h3>
-                                <div class="combined-breakdown"><span>NPR <b id="cb-npr">--</b></span><span>神经网络 <b id="cb-neural">--</b></span><span>综合 <b id="cb-total">--</b></span></div>
+                            <header class="result-analysis-heading"><h3>分析与取证</h3><span>鉴定依据与模型明细</span></header>
+                            <section class="process-panel" id="process-panel" style="display:none;">
+                                <header class="process-top-row"><div class="process-title"><span class="process-title-main">模型风险概览</span><span class="process-title-tab">单次鉴定</span></div></header>
+                                <div class="process-content">
+                                    <div class="progress-rings"><svg id="radar-chart" width="160" height="150" viewBox="0 0 220 210" role="img" aria-label="模型风险雷达图"></svg></div>
+                                    <div class="process-score-list">
+                                        <article><h4>AI 全图生成检测 <b id="proc-ai-score">--</b></h4><div class="process-score-track"><i id="proc-ai-fill"></i></div><p id="proc-ai-desc"></p></article>
+                                        <article><h4>深度换脸检测 <b id="proc-df-score">--</b></h4><div class="process-score-track"><i id="proc-df-fill"></i></div><p id="proc-df-desc"></p></article>
+                                        <article><h4>图像篡改检测 <b id="proc-sp-score">--</b></h4><div class="process-score-track"><i id="proc-sp-fill"></i></div><p id="proc-sp-desc"></p></article>
+                                    </div>
+                                </div>
                             </section>
-                            <section class="detection-detail-group" id="neural-analysis-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>神经网络分析</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><div class="gauge"><span id="neural-gauge-score">--</span><span id="neural-gauge-label">模型分数</span><div class="gauge-track"><i id="neural-gauge-fill"></i></div></div></div>
+                            {% for key, title, subtitle in [('ai', 'AI 全图生成', '图像物理分析与神经网络模型'), ('df', '深度伪造', '人脸辅助分析与深度伪造模型'), ('tp', '图像篡改', 'TruFor 定位与辅助取证')] %}
+                            <section class="detection-detail-group scoring-detail-group" id="{{ key }}-detail-group">
+                                <button type="button" class="detection-detail-toggle" aria-expanded="false" aria-controls="{{ key }}-scoring-content"><span class="scoring-heading-copy"><strong>{{ title }}</strong></span><span class="scoring-card-score" id="{{ key }}-detail-score">--</span><span class="detail-toggle-hint">详情</span></button>
+                                <div class="detection-detail-content" id="{{ key }}-scoring-content" hidden><div id="{{ key }}-scoring-process"></div></div>
                             </section>
-                            <section class="detection-detail-group" id="npr-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>NPR 噪声模式分析</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><div class="gauge"><span id="npr-gauge-score">--</span><span id="npr-gauge-label">噪声模式分数</span><div class="gauge-track"><i id="npr-gauge-fill"></i></div></div><p id="npr-cross-verdict"></p><span id="ncv-icon"></span><span id="ncv-text"></span></div>
-                            </section>
+                            {% endfor %}
                             <section class="content-risk-card" id="content-risk-section" style="display:none;">
-                                <h3>图片内容与风险研判</h3><p id="content-risk-scope"></p><span id="content-risk-level"></span><p id="content-risk-description"></p><div id="content-risk-checks"></div><div id="content-risk-evidence"></div><div id="content-risk-ocr"></div>
+                                <div class="content-risk-header"><h3>图片内容与风险研判</h3><span class="content-risk-level" id="content-risk-level"></span></div><p class="content-risk-scope" id="content-risk-scope"></p><p class="content-risk-description" id="content-risk-description"></p>
+                                <div class="content-risk-row"><span>内容标签</span><div class="content-risk-chips" id="content-risk-tags"></div></div><div class="content-risk-row"><span>风险线索</span><div class="content-risk-chips" id="content-risk-risks"></div></div><div class="content-risk-row"><span>知识匹配</span><div class="content-risk-chips" id="content-risk-knowledge"></div></div>
+                                <div class="content-risk-checks" id="content-risk-checks"></div><div class="content-risk-evidence" id="content-risk-evidence"></div><div class="content-risk-ocr" id="content-risk-ocr"></div>
                             </section>
                             <section class="watermark-notice" id="watermark-notice" style="display:none;">
-                                <h3>水印与内容凭证</h3><div class="watermark-row" id="wn-position-row"><span>位置</span><span id="wn-position"></span></div><div class="watermark-row" id="wn-text-row"><span>识别文字</span><span id="wn-text"></span></div><p id="wn-detail"></p>
-                            </section>
-                            <section class="detection-detail-group" id="df-combined-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>深度伪造综合判定</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><h3 id="df-combined-verdict"></h3><span id="df-combined-score"></span><span id="df-cb-zero"></span><span id="df-cb-model"></span><span id="df-cb-total"></span></div>
-                            </section>
-                            <section class="detection-detail-group" id="df-ela-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>图像误差分析（ELA）</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><div class="gauge"><span id="df-ela-gauge-score">--</span><span id="df-ela-gauge-label">ELA 分数</span><div class="gauge-track"><i id="df-ela-gauge-fill"></i></div></div></div>
-                            </section>
-                            <section class="detection-detail-group" id="df-model-card" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>深度伪造模型</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><span id="df-model-fake">--</span><span id="df-model-real">--</span></div>
-                            </section>
-                            <section class="detection-detail-group" id="tp-combined-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>图像篡改综合判定</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><h3 id="tp-combined-verdict"></h3><span id="tp-combined-score"></span><span id="tp-cb-pf"></span><span id="tp-cb-total"></span></div>
-                            </section>
-                            <section class="detection-detail-group" id="tp-forensic-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>篡改取证分析</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><div class="gauge"><span id="tp-forensic-gauge-score">--</span><span id="tp-forensic-gauge-label">取证分数</span><div class="gauge-track"><i id="tp-forensic-gauge-fill"></i></div></div></div>
-                            </section>
-                            <section class="detection-detail-group" id="tp-pf-section" style="display:none;">
-                                <button type="button" class="detection-detail-toggle" aria-expanded="false"><span>篡改定位模型</span><span class="detail-toggle-hint">点击查看模型明细</span></button>
-                                <div class="detection-detail-content" hidden><div class="gauge"><span id="tp-pf-gauge-score">--</span><span id="tp-pf-gauge-label">定位分数</span><div class="gauge-track"><i id="tp-pf-gauge-fill"></i></div></div><span id="tp-trufor-confidence-block"><span id="tp-trufor-confidence"></span></span><div id="tp-trufor-map-block"><div id="tp-trufor-maps"><img id="tp-trufor-map" alt="篡改定位热力图"></div></div></div>
+                                <h3 id="wn-title">水印与内容凭证</h3><p id="wn-subtitle"></p><div class="watermark-row"><span>标识类型</span><span id="wn-method"></span></div><div class="watermark-row"><span>来源平台</span><span id="wn-source"></span></div><div class="watermark-row"><span>识别置信度</span><span id="wn-confidence"></span></div><div class="watermark-row" id="wn-position-row"><span>位置</span><span id="wn-position"></span></div><div class="watermark-row" id="wn-text-row"><span>识别文字</span><span id="wn-text"></span></div><p id="wn-detail"></p>
                             </section>
                         </div>
                     </div>
@@ -179,39 +163,48 @@
             </div>
         </form>
 
-        <section class="process-panel" id="process-panel" style="display:none;">
-            <header class="process-top-row"><div class="process-title"><span class="process-title-main">检测过程与模型分析</span><span class="process-title-tab">单次鉴定</span></div></header>
-            <div class="process-content">
-                <div class="progress-rings"><svg id="radar-chart" viewBox="0 0 220 210" role="img" aria-label="模型风险雷达图"></svg></div>
-                <div class="process-score-list">
-                    <article><h4>AI 全图生成检测 <b id="proc-ai-score">--</b></h4><div class="process-score-track"><i id="proc-ai-fill"></i></div><p id="proc-ai-desc"></p></article>
-                    <article><h4>深度换脸检测 <b id="proc-df-score">--</b></h4><div class="process-score-track"><i id="proc-df-fill"></i></div><p id="proc-df-desc"></p></article>
-                    <article><h4>图像篡改检测 <b id="proc-sp-score">--</b></h4><div class="process-score-track"><i id="proc-sp-fill"></i></div><p id="proc-sp-desc"></p></article>
-                </div>
-            </div>
-        </section>
-
         <div class="progress-overlay" id="progress-overlay" style="display:none;">
-            <div class="progress-modal"><div class="progress-step-icon" id="progress-step-icon">🔍</div><h2 id="progress-title-text">正在深度分析中…</h2><p id="progress-sub-text">准备连接服务…</p><div class="progress-bar"><i id="progress-bar-fill"></i></div>
-                <div class="progress-steps-row" id="progress-steps-row"><span class="progress-step-dot" data-step="1"></span><span class="progress-step-dot" data-step="2"></span><span class="progress-step-dot" data-step="3"></span><span class="progress-step-dot" data-step="4"></span><span class="progress-step-dot" data-step="5"></span><span class="progress-step-dot" data-step="6"></span><span class="progress-step-dot" data-step="7"></span></div>
-                <p class="progress-error-msg" id="progress-error-msg" style="display:none;"></p><button type="button" class="btn btn-default" id="progress-retry-btn" style="display:none;">重试检测</button>
-            </div>
+            <section class="progress-modal" role="dialog" aria-modal="true" aria-labelledby="progress-dialog-title" aria-describedby="progress-sub-text">
+                <header class="progress-modal-header"><div><span class="progress-eyebrow">图像安全分析</span><h2 id="progress-dialog-title">图像鉴定过程</h2></div><span class="progress-status" id="progress-status">正在分析</span></header>
+                <div class="progress-current">
+                    <div class="progress-step-icon" id="progress-step-icon" aria-hidden="true">◎</div>
+                    <div class="progress-current-copy" aria-live="polite"><h3 id="progress-title-text">准备开始鉴定</h3><p id="progress-sub-text">正在连接检测服务，请稍候…</p></div>
+                    <img class="progress-image" id="progress-image" alt="待鉴定图片" style="display:none;">
+                </div>
+                <div class="progress-metrics"><span id="progress-stage-count">准备分析</span><strong id="progress-percent">0<span>%</span></strong></div>
+                <div class="progress-bar" id="progress-bar" role="progressbar" aria-label="图像鉴定进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar-fill"></i></div>
+                <ol class="progress-steps-row" id="progress-steps-row">
+                    {% for key, label in [('watermark', '水印核验'), ('gpu', '模型推理'), ('ai', 'AI 生成'), ('deepfake', '人脸伪造'), ('tamper', '图像篡改'), ('fusion', '综合判定'), ('content', '内容研判')] %}
+                    <li class="progress-step-dot" data-stage="{{ key }}" data-step="{{ loop.index }}"><span class="pstep-circle">{{ loop.index }}</span><span class="pstep-label">{{ label }}</span><span class="pstep-status">等待中</span></li>
+                    {% endfor %}
+                </ol>
+                <div class="progress-activity"><div class="progress-activity-heading"><span>分析动态</span><span class="progress-elapsed" id="progress-elapsed">已用时 0 秒</span></div><ol id="progress-activity-list"><li><span class="progress-log-time">00:00</span><span>正在准备图片与检测模型</span></li></ol></div>
+                <p class="progress-error-msg" id="progress-error-msg" style="display:none;" role="alert"></p><button type="button" class="progress-retry-btn" id="progress-retry-btn" style="display:none;">重试检测</button>
+                <p class="progress-footnote" id="progress-footnote">正在逐项核验图片，分析完成后将自动展示鉴定结果</p>
+            </section>
         </div>
 
         <section class="skill-view" id="skill-view" style="display:none;">
-            <header class="skill-view-header"><div><h1 id="skill-view-title">图像鉴别 Skills</h1><p id="skill-view-subtitle">读取专项鉴别规则</p></div><div class="skill-header-actions"><button type="button" class="skill-density-toggle" id="skill-density-toggle" aria-pressed="false">展开完整正文</button><button type="button" class="skill-export-button" id="skill-export-button">⇩ 导出 Skill</button><button type="button" class="skill-edit-button" id="skill-edit-button">编辑</button></div></header>
-            <div class="skill-frontmatter" id="skill-frontmatter">正在读取 Skill 定义…</div>
-            <div class="skill-reading-layout"><article class="skill-document" id="skill-document"></article><aside class="skill-toc"><p class="skill-toc-title" id="skill-toc-title">鉴别 Skills</p><nav class="skill-toc-links" id="skill-toc-links"></nav></aside></div>
-            <section class="skill-editor-panel" id="skill-editor-panel" style="display:none;"><textarea id="skill-editor-input" rows="24"></textarea><div><button type="button" id="skill-editor-cancel">取消</button><button type="button" id="skill-editor-save">保存更改</button></div></section>
+            <header class="skill-view-header"><div><h1 id="skill-view-title">图像鉴别 Skills</h1></div><div class="skill-header-actions"><button type="button" class="skill-density-toggle" id="skill-density-toggle" aria-pressed="false">展开完整正文</button><button type="button" class="skill-export-button" id="skill-export-button">⇩ 导出 Skill</button><button type="button" class="skill-edit-button" id="skill-edit-button">编辑</button></div></header>
+            <div class="skill-reading-layout">
+                <aside class="skill-toc" aria-label="专项鉴别导航"><p class="skill-toc-title" id="skill-toc-title">鉴别 Skills</p><nav class="skill-toc-links" id="skill-toc-links"></nav></aside>
+                <article class="skill-document" id="skill-document"></article>
+                <section class="skill-editor-panel" id="skill-editor-panel" style="display:none;"><textarea id="skill-editor-input" rows="24"></textarea><div><button type="button" id="skill-editor-cancel">取消</button><button type="button" id="skill-editor-save">保存更改</button></div></section>
+            </div>
         </section>
 
-        <section id="batch-view" style="display:none;">
+        <section id="batch-view" aria-label="鉴定记录" style="display:none;">
             <div id="task-list-view">
-                <section class="records-hero" aria-labelledby="records-title"><div><h1 id="records-title">鉴定记录</h1><p>集中查看、检索和管理批量图像鉴定任务及处理结果</p></div><span class="records-hero-note">历史任务</span></section>
                 <div class="search-card"><div class="search-row"><input type="text" class="search-input" id="task-search-input" placeholder="搜索任务名称…"><select class="search-select" id="task-status-select"><option value="">全部状态</option><option value="running">运行中</option><option value="completed">已完成</option><option value="failed">失败</option></select><button type="button" class="btn btn-primary" id="task-search-btn">🔍 搜索</button><button type="button" class="btn btn-default" id="task-reset-btn">显示全部</button></div></div>
                 <div class="table-card"><div class="table-toolbar"><span class="table-info" id="task-count-info">共找到 0 条鉴定记录</span><div class="table-toolbar-right"><button type="button" class="btn btn-danger" id="batch-delete-selected" disabled>🗑️ 批量删除</button><button type="button" class="btn btn-default" id="task-refresh-btn">↻ 刷新</button></div></div>
-                    <table class="data-table" id="task-table"><thead><tr><th><input type="checkbox" id="select-all" aria-label="全选"></th><th>任务名称</th><th>图片数量</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="task-table-body"></tbody></table>
-                    <div class="table-empty" id="task-table-empty">暂无鉴定记录</div><div class="task-pagination" id="task-pagination"><button type="button" id="page-prev" disabled>上一页</button><span id="page-num-text">1 / 1</span><span id="page-info-text">第 1 页</span><button type="button" id="page-next" disabled>下一页</button></div><label class="page-size-control">每页显示 <select id="page-size-select"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select> 条</label>
+                    <div class="task-table-content">
+                        <table class="data-table" id="task-table"><thead><tr><th><input type="checkbox" id="select-all" aria-label="全选"></th><th>任务名称</th><th>图片数量</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="task-table-body"></tbody></table>
+                        <div class="table-empty" id="task-table-empty">暂无鉴定记录</div>
+                    </div>
+                    <footer class="task-table-footer">
+                        <label class="page-size-control">每页显示 <select class="page-size-select" id="page-size-select"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select> 条</label>
+                        <nav class="task-pagination" id="task-pagination" aria-label="鉴定记录分页"><button type="button" class="page-btn" id="page-prev" disabled>上一页</button><span class="page-num" id="page-num-text" aria-live="polite">1 / 1</span><button type="button" class="page-btn" id="page-next" disabled>下一页</button></nav>
+                    </footer>
                 </div>
             </div>
             <div id="task-detail-view" style="display:none;">
@@ -238,9 +231,9 @@
                 <label class="upload-model-card is-selected"><input class="upload-model-input" type="checkbox" name="batch-models" value="tamper" checked><span class="upload-model-check">✓</span><div><h3>图像 PS 篡改检测</h3><p>识别局部拼接、复制与篡改痕迹</p></div></label>
             </div>
             <label class="batch-label">犯罪场景</label><div class="upload-model-grid batch-model-grid crime-scene-grid" id="batch-crime-scenes">
-                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="batch-crime-scene" value="fraud"><span class="upload-model-check">✓</span><div><h3>涉诈图片</h3><p>虚假凭证与引流话术</p></div></label>
-                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="batch-crime-scene" value="pornography"><span class="upload-model-check">✓</span><div><h3>涉黄图片</h3><p>不雅内容冒充与名誉侵害</p></div></label>
-                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="radio" name="batch-crime-scene" value="rumor"><span class="upload-model-check">✓</span><div><h3>涉谣言图片</h3><p>公共事件与虚假通报线索</p></div></label>
+                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="batch-crime-scene" value="fraud"><span class="upload-model-check">✓</span><div><h3>涉诈图片</h3><p>虚假凭证与引流话术</p></div></label>
+                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="batch-crime-scene" value="pornography"><span class="upload-model-check">✓</span><div><h3>涉黄图片</h3><p>不雅内容冒充与名誉侵害</p></div></label>
+                <label class="upload-model-card crime-scene-card"><input class="crime-scene-input" type="checkbox" name="batch-crime-scene" value="rumor"><span class="upload-model-check">✓</span><div><h3>涉谣言图片</h3><p>公共事件与虚假通报线索</p></div></label>
             </div>
         </div>
         <div class="batch-modal-footer"><button type="button" class="batch-btn-cancel" id="batch-btn-cancel">取消</button><button type="button" class="batch-btn-start" id="batch-btn-start" disabled>开始鉴定</button></div>
@@ -255,6 +248,6 @@
     <div class="batch-modal batch-modal-lg" role="dialog" aria-modal="true"><div class="batch-modal-header"><h3 id="image-detail-title">图像鉴定详情</h3><button type="button" class="batch-modal-close" id="image-detail-close" aria-label="关闭">×</button></div><div class="batch-modal-body" id="image-detail-body"></div></div>
 </div>
 
-<script src="{{ url_for('static', filename='js/main.js', v='20260929-reconstructed-v1') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js', v='20261008-model-removal-v21') }}"></script>
 </body>
 </html>

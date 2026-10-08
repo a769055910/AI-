@@ -38,6 +38,15 @@ _CODEX_SKILLS_DIR = os.path.join(
     os.environ.get('CODEX_HOME', os.path.join(os.path.expanduser('~'), '.codex')),
     'skills'
 )
+_KNOWLEDGE_BASE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'AI犯罪鉴别知识库.md'
+)
+_KNOWLEDGE_BASE_SECTIONS = {
+    'fraud': ('## 一、AI 深度伪造类犯罪知识库', '## 二、AI 生成虚假信息类犯罪知识库'),
+    'rumor': ('## 二、AI 生成虚假信息类犯罪知识库', '## 三、AI 制作淫秽物品类犯罪知识库'),
+    'porn': ('## 三、AI 制作淫秽物品类犯罪知识库', '## 四、AI 图像生成相关典型案例库'),
+    'common': ('## 四、AI 图像生成相关典型案例库', None),
+}
 SKILL_CATALOG = {
     'common': {
         'title': 'AI 图片鉴定公共模块',
@@ -155,8 +164,9 @@ def fuse_npr_with_physical_evidence(npr_result, camera_forensics):
     )
     fused_score = max(0.0, min(1.0, 0.80 * raw_score + 0.20 * camera_physical_score))
 
-    # 保留内部审计字段，前端只展示最终 NPR 综合得分。
+    # 保留审计字段，供评分详情展示 NPR 内部物证融合过程。
     npr_result['raw_noise_score'] = round(raw_score, 4)
+    npr_result['physical_score'] = round(camera_physical_score, 4)
     npr_result['score'] = round(fused_score, 4)
     npr_result['physical_fused'] = True
     npr_result['physical_dimensions'] = {
@@ -169,207 +179,7 @@ def fuse_npr_with_physical_evidence(npr_result, camera_forensics):
 
 
 # ──────────────────────────────────────────────────────────
-# NPR + AIRealNet + UnivFD + AIDE 融合判定逻辑
-# ──────────────────────────────────────────────────────────
-def _compute_combined_verdict_legacy(npr_result, specialized_models):
-    """
-    融合 NPR 噪声模式分析、AIRealNet、UnivFD 与 AIDE 结果。
-    任一专项模型不可用时自动对可用链路重新归一化，避免单点故障中断检测。
-    输出综合判定结论
-
-    npr_result: { score (0~1), verdict, features, ... }
-    specialized_models: {
-        ai_realnet: { ai_score, human_score, verdict, ... },
-        univfd: { ai_score, human_score, verdict, available, ... },
-        aide: { ai_score, human_score, verdict, available, ... }
-    }
-
-    返回:
-    {
-        final_score: float,      # 综合 AI 概率 (0~1)
-        final_verdict: str,      # 最终判定文本
-        confidence: str,         # 置信度等级 (高/中/低)
-        agreement: str,          # 检测链路一致性
-        detail: str,             # 详细解释
-        npr_contribution: float, # NPR 贡献权重
-        model_contribution: float, # AIRealNet 模型贡献权重
-        univfd_contribution: float # UnivFD 模型贡献权重（可用时）
-        aide_contribution: float   # AIDE 模型贡献权重（可用时）
-    }
-    """
-    # 初始融合权重，后续应使用验收集上的校准结果替代：
-    # AIRealNet 擅长常见图像生成来源，UnivFD 强化跨生成器泛化，
-    # AIDE 提供伪影 + DCT 噪声证据，NPR 用于补充轻量频域证据。
-    W_NPR_FALLBACK = 0.4
-    W_MODEL_FALLBACK = 0.6
-    W_NPR = 0.20
-    W_AIREALNET = 0.30
-    W_UNIVFD = 0.20
-    W_AIDE = 0.30
-    W_DEAR_R = 0.15
-    W_PROBE_DINOV2 = 0.30
-    THRESH_HIGH = 0.75   # ≥75%：AI 生成
-    THRESH_MID  = 0.55   # 55%-75%：疑似 AI 生成；<55%：真实图片
-
-    # 提取 NPR 分数（0~1，越高越像 AI 生成）
-    npr_score = npr_result.get('score', 0.5) if npr_result else 0.5
-    npr_verdict = npr_result.get('verdict', 'uncertain') if npr_result else 'uncertain'
-
-    # 提取 AIRealNet 模型分数
-    ai_realnet_data = specialized_models.get('ai_realnet', {}) if specialized_models else {}
-    model_ai_score = ai_realnet_data.get('ai_score', 0.5)
-    univfd_data = specialized_models.get('univfd', {}) if specialized_models else {}
-    univfd_ai_score = univfd_data.get('ai_score')
-    univfd_available = (
-        univfd_data.get('available', False) is True
-        and isinstance(univfd_ai_score, (int, float))
-    )
-    aide_data = specialized_models.get('aide', {}) if specialized_models else {}
-    aide_ai_score = aide_data.get('ai_score')
-    aide_available = (
-        aide_data.get('available', False) is True
-        and isinstance(aide_ai_score, (int, float))
-    )
-    dear_r_data = specialized_models.get('dear_r', {}) if specialized_models else {}
-    dear_r_ai_score = dear_r_data.get('ai_score')
-    dear_r_available = (
-        dear_r_data.get('available', False) is True
-        and isinstance(dear_r_ai_score, (int, float))
-    )
-    probe_data = specialized_models.get('probe_dinov2', {}) if specialized_models else {}
-    probe_ai_score = probe_data.get('ai_score')
-    probe_available = (
-        probe_data.get('available', False) is True
-        and isinstance(probe_ai_score, (int, float))
-    )
-
-    # ── 加权融合 ──
-    components = [("NPR", npr_score, W_NPR), ("AIRealNet", model_ai_score, W_AIREALNET)]
-    if univfd_available:
-        components.append(("UnivFD", univfd_ai_score, W_UNIVFD))
-    if aide_available:
-        components.append(("AIDE", aide_ai_score, W_AIDE))
-    if dear_r_available:
-        components.append(("DEAR-r", dear_r_ai_score, W_DEAR_R))
-    if probe_available:
-        components.append(("PROBE-DINOv2", probe_ai_score, W_PROBE_DINOV2))
-
-    # 仅剩旧双路时保持原有 0.4 / 0.6 融合；其余情况下按可用模型重新归一化。
-    if not univfd_available and not aide_available:
-        components = [("NPR", npr_score, W_NPR_FALLBACK), ("AIRealNet", model_ai_score, W_MODEL_FALLBACK)]
-    weight_total = sum(weight for _, _, weight in components)
-    normalized = [(name, score, weight / weight_total) for name, score, weight in components]
-    weights = {name: weight for name, _, weight in normalized}
-    combined_score = round(sum(score * weight for _, score, weight in normalized), 4)
-    W_NPR = weights["NPR"]
-    W_AIREALNET = weights["AIRealNet"]
-    W_UNIVFD = weights.get("UnivFD", 0.0)
-    W_AIDE = weights.get("AIDE", 0.0)
-    W_DEAR_R = weights.get("DEAR-r", 0.0)
-    W_PROBE_DINOV2 = weights.get("PROBE-DINOv2", 0.0)
-
-    # NPR 判定方向
-    npr_is_ai = npr_score >= THRESH_MID
-    model_is_ai = model_ai_score >= THRESH_MID
-
-    votes = [("NPR", npr_is_ai), ("AIRealNet", model_is_ai)]
-    if univfd_available:
-        votes.append(("UnivFD", univfd_ai_score >= THRESH_MID))
-    if aide_available:
-        votes.append(("AIDE", aide_ai_score >= THRESH_MID))
-    if dear_r_available:
-        votes.append(("DEAR-r", dear_r_ai_score >= THRESH_MID))
-    if probe_available:
-        votes.append(("PROBE-DINOv2", probe_ai_score >= THRESH_MID))
-    vote_values = [value for _, value in votes]
-    vote_count_name = {2: "双路", 3: "三路", 4: "四路"}.get(len(votes), f"{len(votes)}路")
-    if all(vote_values):
-        agreement = f"{vote_count_name}一致"
-        agreement_detail = f"{'、'.join(name for name, _ in votes)} 均判定为 AI 生成"
-    elif not any(vote_values):
-        agreement = f"{vote_count_name}一致"
-        agreement_detail = f"{'、'.join(name for name, _ in votes)} 均判定为真实图片"
-    elif len(votes) == 2 and npr_is_ai and model_is_ai:
-        agreement = "双模型一致"
-        agreement_detail = "NPR 噪声分析与 AIRealNet 检测器均判定为 AI 生成"
-    else:
-        agreement = "模型分歧"
-        ai_names = [name for name, is_ai in votes if is_ai]
-        real_names = [name for name, is_ai in votes if not is_ai]
-        agreement_detail = f"AI 判定：{'、'.join(ai_names)}；真实判定：{'、'.join(real_names)}"
-
-    # ── 最终判定（三档）──
-    if combined_score >= THRESH_HIGH:
-        final_verdict = "AI生成图片"
-        confidence = "高" if "一致" in agreement else "中高"
-    elif combined_score >= THRESH_MID:
-        final_verdict = "疑似AI生成图片"
-        confidence = "中" if "一致" in agreement else "中低"
-    else:
-        final_verdict = "真实图片"
-        confidence = "高" if "一致" in agreement else "中"
-
-    # 有分歧时降一级置信度
-    if agreement == "模型分歧":
-        conf_order = ["高", "中高", "中", "中低", "低"]
-        idx = conf_order.index(confidence) if confidence in conf_order else 2
-        confidence = conf_order[min(idx + 1, len(conf_order) - 1)]
-
-    # ── 生成详细解释 ──
-    detail_terms = [
-        f"NPR 贡献 {npr_score:.2f} × {W_NPR}",
-        f"AIRealNet 贡献 {model_ai_score:.2f} × {W_AIREALNET}",
-    ]
-    if univfd_available:
-        detail_terms.append(f"UnivFD 贡献 {univfd_ai_score:.2f} × {W_UNIVFD}")
-    if aide_available:
-        detail_terms.append(f"AIDE 贡献 {aide_ai_score:.2f} × {W_AIDE}")
-    if dear_r_available:
-        detail_terms.append(f"DEAR-r 贡献 {dear_r_ai_score:.2f} × {W_DEAR_R}")
-    if probe_available:
-        detail_terms.append(f"PROBE-DINOv2 贡献 {probe_ai_score:.2f} × {W_PROBE_DINOV2}")
-    detail = (
-        f"{agreement_detail}。综合加权得分 {combined_score:.2f}（{' + '.join(detail_terms)}），"
-        f"判定为「{final_verdict}」，置信度: {confidence}。"
-    )
-
-    return {
-        "final_score": combined_score,
-        "final_verdict": final_verdict,
-        "confidence": confidence,
-        "agreement": agreement,
-        "agreement_detail": agreement_detail,
-        "detail": detail,
-        "npr_contribution": round(npr_score * W_NPR, 4),
-        "model_contribution": round(model_ai_score * W_AIREALNET, 4),
-        # 所有神经网络检测器在融合结果中的合计贡献；单模型原始分数。
-        # 仅在前端“神经网络分析”细节中展示。
-        "neural_contribution": round(
-            model_ai_score * W_AIREALNET
-            + (univfd_ai_score * W_UNIVFD if univfd_available else 0.0)
-            + (aide_ai_score * W_AIDE if aide_available else 0.0),
-            4,
-        ),
-        "npr_score": npr_score,
-        "model_ai_score": model_ai_score,
-        "univfd_available": univfd_available,
-        "univfd_ai_score": univfd_ai_score if univfd_available else None,
-        "univfd_contribution": round(univfd_ai_score * W_UNIVFD, 4) if univfd_available else 0.0,
-        "aide_available": aide_available,
-        "aide_ai_score": aide_ai_score if aide_available else None,
-        "aide_contribution": round(aide_ai_score * W_AIDE, 4) if aide_available else 0.0,
-        "dear_r_available": dear_r_available,
-        "dear_r_ai_score": dear_r_ai_score if dear_r_available else None,
-        "dear_r_contribution": round(dear_r_ai_score * W_DEAR_R, 4) if dear_r_available else 0.0,
-        "probe_available": probe_available,
-        "probe_ai_score": probe_ai_score if probe_available else None,
-        "probe_contribution": round(probe_ai_score * W_PROBE_DINOV2, 4) if probe_available else 0.0,
-        "fusion_mode": " + ".join(name for name, _, _ in normalized),
-    }
-
-
-# ──────────────────────────────────────────────────────────
-# DeepFake 零模型 + 纯模型 融合判定逻辑
+# AI 全图生成融合判定逻辑
 # ──────────────────────────────────────────────────────────
 def compute_combined_verdict(npr_result, specialized_models):
     """Fuse physical evidence with the available AI-image neural detectors."""
@@ -379,8 +189,6 @@ def compute_combined_verdict(npr_result, specialized_models):
 
     configured_models = (
         ("UnivFD", "univfd", 0.20),
-        ("AIDE", "aide", 0.35),
-        ("DEAR-r", "dear_r", 0.15),
         ("PROBE-DINOv2", "probe_dinov2", 0.30),
     )
     components = [("NPR", npr_score, 0.20)]
@@ -432,11 +240,9 @@ def compute_combined_verdict(npr_result, specialized_models):
         return score is not None, score, round((score or 0.0) * weight, 4)
 
     univfd_available, univfd_score, univfd_contribution = model_payload("univfd", "UnivFD")
-    aide_available, aide_score, aide_contribution = model_payload("aide", "AIDE")
-    dear_available, dear_score, dear_contribution = model_payload("dear_r", "DEAR-r")
     probe_available, probe_score, probe_contribution = model_payload("probe_dinov2", "PROBE-DINOv2")
     neural_contribution = round(
-        univfd_contribution + aide_contribution + dear_contribution + probe_contribution, 4
+        univfd_contribution + probe_contribution, 4
     )
     return {
         "final_score": final_score,
@@ -446,17 +252,16 @@ def compute_combined_verdict(npr_result, specialized_models):
         "agreement_detail": agreement_detail,
         "detail": detail,
         "npr_contribution": round(npr_score * weights["NPR"], 4),
+        "scoring": {
+            "components": [{"name": name, "score": score, "weight": weight, "contribution": round(score * weight, 4), "available": True} for name, score, weight in normalized],
+            "base_score": final_score, "threshold": AI_GENERATED_THRESHOLD, "operator": ">=",
+            "rule": "仅使用可用模型，归一化权重后加权求和。",
+        },
         "neural_contribution": neural_contribution,
         "npr_score": npr_score,
         "univfd_available": univfd_available,
         "univfd_ai_score": univfd_score,
         "univfd_contribution": univfd_contribution,
-        "aide_available": aide_available,
-        "aide_ai_score": aide_score,
-        "aide_contribution": aide_contribution,
-        "dear_r_available": dear_available,
-        "dear_r_ai_score": dear_score,
-        "dear_r_contribution": dear_contribution,
         "probe_available": probe_available,
         "probe_ai_score": probe_score,
         "probe_contribution": probe_contribution,
@@ -464,6 +269,9 @@ def compute_combined_verdict(npr_result, specialized_models):
     }
 
 
+# ──────────────────────────────────────────────────────────
+# DeepFake 零模型 + 纯模型 融合判定逻辑
+# ──────────────────────────────────────────────────────────
 def compute_deepfake_combined_verdict(deepfake_zero, deepfake_model):
     """
     融合 DeepFake 零模型（ELA）与纯模型（ViT-B）结果
@@ -512,6 +320,7 @@ def compute_deepfake_combined_verdict(deepfake_zero, deepfake_model):
             "zero_score": 0.0,
             "model_score": 0.0,
             "face_detected": False,
+            "scoring": {"components": [], "base_score": None, "threshold": THRESHOLD, "operator": ">", "rule": "未检测到可分析人脸，不参与深度伪造评分。"},
         }
 
     # ── 加权融合 ──
@@ -573,6 +382,14 @@ def compute_deepfake_combined_verdict(deepfake_zero, deepfake_model):
         "agreement_detail": agreement_detail,
         "detail": detail,
         "zero_contribution": round(zero_score * (0.30 if not face_detected else W_ZERO), 4),
+        "scoring": {
+            "components": [
+                {"name": "人脸辅助分析（含 ELA）", "score": zero_score, "weight": W_ZERO, "contribution": round(zero_score * W_ZERO, 4), "available": bool(deepfake_zero and zero_verdict != 'error')},
+                {"name": "深度伪造人脸模型", "score": model_score, "weight": W_MODEL, "contribution": round(model_score * W_MODEL, 4), "available": bool(deepfake_model and deepfake_model.get('available') is not False)},
+            ],
+            "base_score": combined_score, "threshold": THRESHOLD, "operator": ">",
+            "rule": "人脸辅助分析占 30%，人脸模型占 70%，加权求和。",
+        },
         "model_contribution": round(model_score * (0.70 if not face_detected else W_MODEL), 4),
         "zero_score": zero_score,
         "model_score": model_score,
@@ -723,6 +540,7 @@ def compute_tamper_combined_verdict(tamper_result):
             'model_contribution': 0.0,
             'model_score': None,
             'model_reliability': None,
+            'scoring': {'components': [], 'base_score': None, 'threshold': TAMPER_THRESHOLD, 'operator': '>=', 'rule': 'TruFor 模型不可用，本次没有有效篡改评分。'},
         }
 
     score = float(primary.get('score', 0.0) or 0.0)
@@ -742,6 +560,11 @@ def compute_tamper_combined_verdict(tamper_result):
         'model_contribution': round(score, 4),
         'model_score': round(score, 4),
         'model_reliability': round(reliability, 4) if reliability is not None else None,
+        'scoring': {
+            'components': [{'name': 'TruFor 篡改定位模型', 'score': score, 'weight': 1.0, 'contribution': round(score, 4), 'available': True}],
+            'base_score': round(score, 4), 'threshold': TAMPER_THRESHOLD, 'operator': '>=',
+            'rule': 'TruFor 分数作为该项最终得分；复制移动和噪声分析仅作辅助证据，不参与加权。',
+        },
     }
 
 
@@ -863,6 +686,8 @@ def apply_c2pa_ai_evidence(combined_verdict, hidden_watermark_result):
             + (' ' + result.get('detail', '') if result.get('detail') else '')
         ),
     })
+    if result.get('scoring'):
+        result['scoring'] = {**result['scoring'], 'adjustment': {'score': result['final_score'], 'reason': result['provenance_status'] + '；按当前配置将 AI 全图生成得分至少提升到 99 分。'}}
     return result
 
 
@@ -901,6 +726,25 @@ def index():
     return render_template('index.html')
 
 
+def _read_knowledge_base_skill(skill_key, skill):
+    """Use the checked-in knowledge base when a personal Codex skill is absent."""
+    start_heading, end_heading = _KNOWLEDGE_BASE_SECTIONS[skill_key]
+    with open(_KNOWLEDGE_BASE_PATH, 'r', encoding='utf-8') as source_file:
+        source = source_file.read()
+    start = source.find(start_heading)
+    end = source.find(end_heading, start + len(start_heading)) if end_heading else len(source)
+    if start < 0 or end < 0:
+        raise ValueError('知识库章节缺失')
+    section = source[start:end].strip()
+    markdown = (
+        f"---\nname: {skill['skill_name']}\n"
+        f"description: {skill['summary']}\n"
+        "source: AI犯罪鉴别知识库.md\n---\n\n"
+        f"{section}\n"
+    )
+    return markdown
+
+
 @app.route('/api/skills/<skill_key>', methods=['GET', 'POST'])
 def get_skill_content(skill_key):
     """读取或保存固定图像专项 Skill 的 Markdown。"""
@@ -915,6 +759,8 @@ def get_skill_content(skill_key):
     if request.method == 'POST':
         if not skill.get('editable', True):
             return jsonify({'error': '公共模块由三个专项 Skill 共用，当前页面仅支持只读查看。'}), 405
+        if not os.path.isfile(skill_path):
+            return jsonify({'error': '当前展示的是知识库章节，只读；请先安装对应的 Skill 文件。'}), 405
         payload = request.get_json(silent=True) or {}
         markdown = payload.get('markdown')
         if not isinstance(markdown, str) or not markdown.strip():
@@ -939,23 +785,29 @@ def get_skill_content(skill_key):
             return jsonify({'error': '保存 Skill 文件失败'}), 500
         return jsonify({'ok': True, 'markdown': markdown})
 
+    from_knowledge_base = False
     try:
         with open(skill_path, 'r', encoding='utf-8') as skill_file:
             markdown = skill_file.read()
     except OSError:
-        return jsonify({
-            'error': '该 Skill 文件暂不可用',
-            'title': skill['title'],
-            'summary': skill['summary'],
-        }), 503
+        try:
+            markdown = _read_knowledge_base_skill(skill_key, skill)
+            from_knowledge_base = True
+        except (OSError, ValueError):
+            return jsonify({
+                'error': 'Skill 文件和项目知识库均不可用',
+                'title': skill['title'],
+                'summary': skill['summary'],
+            }), 503
 
     return jsonify({
         'key': skill_key,
         'title': skill['title'],
         'skill_name': skill['skill_name'],
-        'file_name': skill.get('filename', 'SKILL.md'),
+        'file_name': 'AI犯罪鉴别知识库.md' if from_knowledge_base else skill.get('filename', 'SKILL.md'),
         'summary': skill['summary'],
-        'editable': skill.get('editable', True),
+        'editable': skill.get('editable', True) and not from_knowledge_base,
+        'source': 'knowledge_base' if from_knowledge_base else 'codex_skill',
         'markdown': markdown,
     })
 
@@ -1029,8 +881,38 @@ def api_detect_image_stream():
     file_obj.save(save_path)
     file_obj.seek(0)
 
-    def generate():
+    def generate(selected_models):
+        stage_models = {'ai': 'ai_generated', 'deepfake': 'deepfake', 'tamper': 'tamper'}
+        stages = {key: 'pending' for key in ('watermark', 'gpu', 'ai', 'deepfake', 'tamper', 'fusion', 'content')}
+        for key, model in stage_models.items():
+            if model not in selected_models:
+                stages[key] = 'skipped'
+        if not {'ai_generated', 'deepfake'} & set(selected_models):
+            stages['gpu'] = 'skipped'
+        stage_names = {
+            '水印检测': 'watermark', 'GPU推理': 'gpu', 'AI全图生成': 'ai',
+            'DeepFake': 'deepfake', '图像篡改': 'tamper', '融合判定': 'fusion',
+            '内容研判': 'content',
+        }
+        last_percent = 0
+
         def send_event(event_type, data):
+            nonlocal last_percent
+            if event_type == 'progress':
+                stage = stage_names.get(data.get('stepName'))
+                for key in stages:
+                    if stages[key] == 'active' and key != stage:
+                        stages[key] = 'done'
+                if data.get('shortcut'):
+                    for key in ('gpu', 'ai', 'deepfake', 'tamper'):
+                        stages[key] = 'skipped'
+                    stages['fusion'] = 'done'  # 判定来自已确认的平台标识。
+                if stage:
+                    stages[stage] = data.get('state', 'active')
+                if data.get('stepName') == '完成':
+                    stages.update({key: 'skipped' for key, state in stages.items() if state == 'pending'})
+                last_percent = max(last_percent, data.get('percent', 0))
+                data = {**data, 'percent': last_percent, 'stages': dict(stages)}
             return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
         # ── 相机成像物证（不直接判 AI/篡改）──
@@ -1081,6 +963,8 @@ def api_detect_image_stream():
         hidden_has_c2pa = c2pa_credential_present(hidden_result)
         if hidden_has_c2pa:
             selected_models = tuple(dict.fromkeys((*selected_models, 'ai_generated', 'deepfake', 'tamper')))
+            for key in ('gpu', 'ai', 'deepfake', 'tamper'):
+                stages[key] = 'pending'
         if ('ai_generated' in selected_models and hidden_result and hidden_result.get('detected')
                 and not hidden_has_c2pa):
             # 隐式标识命中 → 直接短路判定 AI 生成
@@ -1138,7 +1022,7 @@ def api_detect_image_stream():
             }
 
             yield send_event("progress", {
-                "step": 6, "total": 7, "percent": 75,
+                "step": 7, "total": 7, "percent": 75, "shortcut": True,
                 "stepName": "内容研判", "message": "正在识别图片内容并匹配犯罪知识库...",
                 "color": "#7c3aed"
             })
@@ -1146,15 +1030,11 @@ def api_detect_image_stream():
                 save_path, shortcut_result['label'], shortcut_result['label_text'], shortcut_result['confidence'], crime_scene
             )
 
-            for pct, msg in [(85, "隐式标识与内容研判完成，正在生成检测报告..."), (95, "正在汇总检测结果..."), (100, "检测完成！")]:
-                yield send_event("progress", {
-                    "step": min(7, int(pct / 100 * 7) + 1),
-                    "total": 7, "percent": pct,
-                    "stepName": "水印判定" if pct < 100 else "完成",
-                    "message": msg,
-                    "color": "#10b981" if pct < 100 else "#22c55e",
-                    "detail": f"已确认隐式标识来源: {hidden_result.get('source', '未知平台')}"
-                })
+            yield send_event("progress", {
+                "step": 7, "total": 7, "percent": 100, "stepName": "完成",
+                "message": "隐式标识与内容研判完成", "color": "#22c55e",
+                "detail": f"已确认隐式标识来源: {hidden_result.get('source', '未知平台')}"
+            })
 
             yield send_event("result", shortcut_result)
             yield send_event("done", {})
@@ -1220,7 +1100,7 @@ def api_detect_image_stream():
             }
 
             yield send_event("progress", {
-                "step": 6, "total": 7, "percent": 75,
+                "step": 7, "total": 7, "percent": 75, "shortcut": True,
                 "stepName": "内容研判", "message": "正在识别图片内容并匹配犯罪知识库...",
                 "color": "#7c3aed"
             })
@@ -1228,16 +1108,11 @@ def api_detect_image_stream():
                 save_path, shortcut_result['label'], shortcut_result['label_text'], shortcut_result['confidence'], crime_scene
             )
 
-            # 模拟快速进度条跳至完成
-            for pct, msg in [(85, "水印与内容研判完成，正在生成检测报告..."), (95, "正在汇总检测结果..."), (100, "检测完成！")]:
-                yield send_event("progress", {
-                    "step": min(7, int(pct / 100 * 7) + 1),
-                    "total": 7, "percent": pct,
-                    "stepName": "水印判定" if pct < 100 else "完成",
-                    "message": msg,
-                    "color": "#10b981" if pct < 100 else "#22c55e",
-                    "detail": f"已确认 AI 水印来源: {watermark_result.get('source', '未知平台')}"
-                })
+            yield send_event("progress", {
+                "step": 7, "total": 7, "percent": 100, "stepName": "完成",
+                "message": "水印与内容研判完成", "color": "#22c55e",
+                "detail": f"已确认 AI 水印来源: {watermark_result.get('source', '未知平台')}"
+            })
 
             yield send_event("result", shortcut_result)
             yield send_event("done", {})
@@ -1245,7 +1120,7 @@ def api_detect_image_stream():
 
         # 未检测到水印，继续正常流程
         yield send_event("progress", {
-            "step": 1, "total": 7, "percent": 8,
+            "step": 1, "total": 7, "percent": 8, "state": "done",
             "stepName": "水印检测",
             "message": "未检测到可见水印，进入深度学习推理...",
             "color": "#10b981",
@@ -1255,8 +1130,9 @@ def api_detect_image_stream():
         # ── 步骤 2: GPU 推理 ──
         yield send_event("progress", {
             "step": 2, "total": 7, "percent": 10,
+            "state": "active" if {'ai_generated', 'deepfake'} & set(selected_models) else "skipped",
             "stepName": "GPU推理",
-            "message": "正在上传图片并连接GPU推理服务...",
+            "message": "正在上传图片并进行模型推理..." if {'ai_generated', 'deepfake'} & set(selected_models) else "当前选择仅需本地图像篡改分析，跳过模型推理",
             "color": "#6366f1"
         })
 
@@ -1284,9 +1160,10 @@ def api_detect_image_stream():
 
         yield send_event("progress", {
             "step": 2, "total": 7, "percent": 25,
+            "state": ("warning" if gpu_error else "done") if {'ai_generated', 'deepfake'} & set(selected_models) else "skipped",
             "stepName": "GPU推理",
-            "message": "GPU推理完成（SwinV2 + ViT-B）" if not gpu_error else "GPU推理不可用，继续本地专项检测",
-            "color": "#6366f1", "detail": "已获取双模型推理结果" if not gpu_error else gpu_error
+            "message": ("专项模型推理完成" if not gpu_error else "模型推理不可用，继续本地专项检测") if {'ai_generated', 'deepfake'} & set(selected_models) else "进入本地图像篡改分析",
+            "color": "#6366f1", "detail": gpu_error or ''
         })
 
         npr_result = None
@@ -1303,6 +1180,7 @@ def api_detect_image_stream():
             npr_result = fuse_npr_with_physical_evidence(npr_result, camera_forensics)
             yield send_event("progress", {
                 "step": 3, "total": 7, "percent": 45, "stepName": "AI全图生成",
+                "state": "warning" if npr_result.get('verdict') == 'error' else "done",
                 "message": "AI全图生成检测完成", "color": "#8b5cf6",
                 "detail": f"频域特征提取完成，NPR得分 {npr_result.get('score', 0):.2f}"
             })
@@ -1321,6 +1199,7 @@ def api_detect_image_stream():
                 deepfake_result = {"deepfake_score": 0.0, "verdict": "error", "detail": str(e)}
             yield send_event("progress", {
                 "step": 4, "total": 7, "percent": 62, "stepName": "DeepFake",
+                "state": "warning" if deepfake_result.get('verdict') == 'error' else "done",
                 "message": "DeepFake检测完成", "color": "#f59e0b",
                 "detail": f"ELA分析完成，人脸检测{'已' if deepfake_result.get('face_detected') else '未'}发现"
             })
@@ -1337,6 +1216,7 @@ def api_detect_image_stream():
                 tamper_result = {"tamper_score": 0.0, "verdict": "error", "detail": str(e)}
             yield send_event("progress", {
                 "step": 5, "total": 7, "percent": 80, "stepName": "图像篡改",
+                "state": "warning" if tamper_result.get('verdict') == 'error' else "done",
                 "message": "图像篡改检测完成", "color": "#06b6d4",
                 "detail": "复制移动+区块噪声+特征一致性分析完成"
             })
@@ -1380,9 +1260,16 @@ def api_detect_image_stream():
             })
             return
 
+        yield send_event("progress", {
+            "step": 6, "total": 7, "percent": 94, "state": "done",
+            "stepName": "融合判定", "message": "综合判定完成",
+            "color": "#ec4899", "detail": f"综合判定: {final_comparison['final_verdict']}"
+        })
+
         content_confirmed = should_analyze_content(final_comparison['final_label'])
         yield send_event("progress", {
             "step": 7, "total": 7, "percent": 96,
+            "state": "active" if content_confirmed else "skipped",
             "stepName": "内容研判",
             "message": (
                 "已确认 AI 生成，正在识别图片内容并匹配犯罪知识库..."
@@ -1397,14 +1284,6 @@ def api_detect_image_stream():
             final_comparison['final_score'],
             crime_scene,
         )
-
-        yield send_event("progress", {
-            "step": 6, "total": 7, "percent": 95,
-            "stepName": "融合判定",
-            "message": "融合判定完成",
-            "color": "#ec4899",
-            "detail": f"综合判定: {final_comparison['final_verdict']}"
-        })
 
         # ── 步骤 7: 完成 ──
         result_data = {
@@ -1446,7 +1325,7 @@ def api_detect_image_stream():
         yield send_event("done", {})
 
     return Response(
-        stream_with_context(generate()),
+        stream_with_context(generate(selected_models)),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',

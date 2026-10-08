@@ -6,6 +6,8 @@ venv/
 .env
 .env.*
 !.env.example
+mysql.local.json
+gpu.remote.local.json
 
 # Runtime uploads, generated files, and logs
 uploads/
@@ -38,6 +40,8 @@ dsh-dafeiyu/
 软件界面截图/
 
 # Temporary diagnostics and deployment helpers
+codex_probe_tmp.txt
+test_data/ai_platform_web_20261008.zip
 _check_server.py
 _debug_wm.py
 _deploy.py

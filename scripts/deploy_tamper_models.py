@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 from pathlib import Path
 
@@ -18,6 +19,15 @@ REMOTE_ROOT = "/root/forge-detector"
 
 
 def _deployment_settings() -> dict[str, object]:
+    local_config = PROJECT / "gpu.remote.local.json"
+    if local_config.is_file():
+        config = json.loads(local_config.read_text(encoding="utf-8"))
+        settings = {name: os.environ.get(f"AUTODL_SSH_{name}", config.get(name)) for name in ("HOST", "PORT", "USER", "PASSWORD")}
+        missing = [name for name, value in settings.items() if value is None or value == ""]
+        if missing:
+            raise RuntimeError(f"Missing deployment settings: {', '.join(missing)}")
+        settings["PORT"] = int(settings["PORT"])
+        return settings
     tree = ast.parse((PROJECT / "_fix_restart.py").read_text(encoding="utf-8"))
     settings: dict[str, object] = {}
     wanted = {"HOST", "PORT", "USER", "PASSWORD"}

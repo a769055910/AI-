@@ -53,6 +53,8 @@ AutoDL GPU 服务器 (gpu_server.py, 端口 6006)
 
 Local-only restart helper scripts are excluded from the repository. Use the manual SSH steps below.
 
+部署工具 `scripts/deploy_tamper_models.py` 优先读取本地 `gpu.remote.local.json` 的 `HOST`、`PORT`、`USER`、`PASSWORD`，也支持通过 `AUTODL_SSH_*` 环境变量覆盖。这份连接配置已加入 Git 忽略列表；更换实例时更新本地配置及 AutoDL 隧道工具中的 SSH 地址。
+
 **方式 B：SSH 手动启动**
 
 ```bash
@@ -94,11 +96,17 @@ TruFor 篡改定位默认将最长边超过 1024px 的图片以 Lanczos 高质�
 
 **建立 SSH 隧道**（把远程 6006 映射到本地 6006），然后本地验证：
 
+本地也可使用 `python scripts/gpu_ssh_tunnel.py` 启动自动重连隧道：读取 `gpu.remote.local.json`，仅监听 `127.0.0.1:6006`，SSH 断开后每 5 秒重试。该方式与 AutoDL 工具的 6006 转发只能启用一个。需要 `paramiko`；服务器主机公钥保存在 `tmp/gpu_tunnel_known_hosts` 并严格校验。当前实例公钥已经登记；更换实例时须重新核实并登记公钥。日志中不记录密码。退出隧道进程或重启本机后需再次启动，不会自动开机运行。
+
 ```powershell
 Invoke-WebRequest -Uri "http://127.0.0.1:6006/health" -UseBasicParsing
 ```
 
 **启动本地 Web 服务**：
+
+鉴定记录使用 MySQL。连接配置保存在项目根目录的 `mysql.local.json`，包含 `host`、`port`、`user`、`password`、`database`；该文件已被 Git 忽略。默认地址为 `127.0.0.1:3306`，数据库为 `ai_picture`。环境变量 `MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_USER`、`MYSQL_PASSWORD`、`MYSQL_DATABASE` 可以覆盖本机配置。
+
+首次使用先运行 `python scripts/init_mysql.py` 创建数据库和鉴定记录表；再次运行会保留已有表和记录。
 
 ```powershell
 python app.py
@@ -107,6 +115,12 @@ python app.py
 浏览器访问 `http://127.0.0.1:5000` 即可使用。
 
 ## 三、检测能力说明
+
+### AI 全图生成模型
+
+当前 GPU 实例使用 PROBE-DINOv2，本地使用 NPR 噪声模式分析及相机成像物证。
+融合时对仍可用的模型权重归一化；当前实例的 NPR（含相机物证）占 40%，PROBE 占 60%。
+AIDE（GenImage）与 DEAR-r 已从推理、预加载、评分和前端展示中移除，GPU 上对应权重及专用源码已清理。
 
 ### 水印检测（步骤 1，双通道）
 

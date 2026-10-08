@@ -7,10 +7,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var fileInput = document.getElementById('file-input');
     var uploadArea = document.getElementById('upload-area');
     var uploadError = document.getElementById('upload-error');
+    var imageUrlInput = document.getElementById('image-url-input');
+    var imageUrlImport = document.getElementById('image-url-import');
     var uploadPreviewUrl = null;
+    var resultPreviewUrl = null;
+    var resultStampObserver = null;
     var uploadValidationPending = false;
     var MIN_IMAGE_FILE_BYTES = 30 * 1024;
     var MAX_IMAGE_FILE_BYTES = 20 * 1024 * 1024;
+    var MAX_BATCH_IMAGES = 200;
     var MIN_IMAGE_SHORT_EDGE = 300;
     var resultBackButton = document.getElementById('result-back-button');
     var contentSubtitle = document.querySelector('.content-subtitle');
@@ -22,10 +27,6 @@ document.addEventListener('DOMContentLoaded', function () {
     var uploadSection = document.getElementById('upload-section');
     var resultSection = document.getElementById('result-section');
     var previewContainer = document.getElementById('preview-container');
-    var resultBadge = document.getElementById('result-badge');
-    var badgeLabel = document.getElementById('badge-label');
-    var badgeScore = document.getElementById('badge-score');
-    var badgeSvg = document.getElementById('badge-svg');
     var imagePreviewView = document.getElementById('image-preview-view');
     var aiCodePanel = document.getElementById('ai-code-panel');
     var aiCodeStatus = document.getElementById('ai-code-status');
@@ -42,6 +43,20 @@ document.addEventListener('DOMContentLoaded', function () {
     var progressErrorMsg = document.getElementById('progress-error-msg');
     var progressRetryBtn = document.getElementById('progress-retry-btn');
     var progressStepsRow = document.getElementById('progress-steps-row');
+    var progressModal = progressOverlay.querySelector('.progress-modal');
+    var progressPercent = document.getElementById('progress-percent');
+    var progressBar = document.getElementById('progress-bar');
+    var progressStatus = document.getElementById('progress-status');
+    var progressStageCount = document.getElementById('progress-stage-count');
+    var progressActivityList = document.getElementById('progress-activity-list');
+    var progressElapsed = document.getElementById('progress-elapsed');
+    var progressFootnote = document.getElementById('progress-footnote');
+    var progressImage = document.getElementById('progress-image');
+    var progressTimer = null;
+    var progressStartedAt = 0;
+    var progressValue = 0;
+    var progressLastMessage = '';
+    var progressPreviousFocus = null;
 
     // 存储最近一次检测详情，供「检测过程」面板使用
     var lastDetails = null;
@@ -55,6 +70,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var lastFinalComparison = null;
     var lastShortcut = false;          // 水印短路判定（跳过深度学习）
     var lastWatermark = null;          // 水印检测结果（hidden_watermark_result / watermark_result）
+    var lastHiddenWatermark = null;
     var lastWatermarkIsHidden = false; // 是否为隐式元数据标识（TC260/C2PA）
     var lastVisibleWatermark = null;   // 可见水印检测结果
     var lastContentAnalysis = null;    // 图片内容识别 + 知识库风险研判
@@ -98,12 +114,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function showLandingPage() {
+        document.body.classList.remove('image-detection-page');
         if (landingPage) landingPage.style.display = '';
         if (topbar) topbar.style.display = 'none';
         if (appBody) appBody.style.display = 'none';
     }
 
     function showImageDetectionPage() {
+        document.body.classList.add('image-detection-page');
         if (landingPage) landingPage.style.display = 'none';
         if (topbar) topbar.style.display = '';
         if (appBody) appBody.style.display = '';
@@ -161,7 +179,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateButtonState() {
         var hasFile = fileInput && fileInput.files.length > 0;
         var countEl = document.getElementById('upload-selection-count');
-        if (countEl) countEl.textContent = '已选择 ' + (hasFile ? 1 : 0) + ' 张图片';
+        if (countEl) countEl.textContent = '已选择 ' + (hasFile ? fileInput.files.length : 0) + ' 张图片';
         if (hasFile && !uploadValidationPending) {
             detectBtn.classList.add('ready');
             detectBtn.disabled = false;
@@ -185,6 +203,10 @@ document.addEventListener('DOMContentLoaded', function () {
             setUploadError('未选择支持的图片文件（JPG、JPEG、PNG、BMP 或 WebP）。');
             return;
         }
+        if (imageFiles.length > MAX_BATCH_IMAGES) {
+            setUploadError('单次最多上传 200 张图片，请分批选择。');
+            return;
+        }
         setUploadError('');
         clearUploadPreview();
         syncBatchOptionsFromSingle();
@@ -200,6 +222,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (fileInput) fileInput.value = '';
             openBatchTaskFromUpload(files, 'files');
             updateButtonState();
+            var selectedCount = document.getElementById('upload-selection-count');
+            if (selectedCount && files.length <= MAX_BATCH_IMAGES) selectedCount.textContent = '已选择 ' + files.length + ' 张图片';
             return;
         }
         var file = fileInput.files[0];
@@ -247,6 +271,57 @@ document.addEventListener('DOMContentLoaded', function () {
 
     updateButtonState();
     if (fileInput) fileInput.addEventListener('change', refreshUploadSelection);
+    if (imageUrlInput && imageUrlImport) {
+        imageUrlInput.addEventListener('input', function () {
+            imageUrlImport.disabled = !imageUrlInput.value.trim() || imageUrlImport.dataset.loading === 'true';
+        });
+        imageUrlImport.addEventListener('click', async function () {
+            var urls = imageUrlInput.value.split(/[;,\n\r]+/).map(function (value) { return value.trim(); }).filter(Boolean);
+            if (!urls.length) return;
+            if (urls.length > MAX_BATCH_IMAGES) {
+                setUploadError('单次最多导入 200 张图片，请分批输入。');
+                return;
+            }
+            imageUrlImport.dataset.loading = 'true';
+            imageUrlImport.disabled = true;
+            imageUrlImport.textContent = '导入中';
+            setUploadError('');
+            try {
+                var importedFiles = await Promise.all(urls.map(async function (url, index) {
+                    var parsedUrl = new URL(url, window.location.href);
+                    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') throw new Error('图片地址仅支持 HTTP 或 HTTPS');
+                    var response = await fetch(parsedUrl.href, { mode: 'cors' });
+                    if (!response.ok) throw new Error('图片下载失败（HTTP ' + response.status + '）');
+                    var blob = await response.blob();
+                    var filename = decodeURIComponent(parsedUrl.pathname.split('/').pop() || ('image-' + (index + 1) + '.jpg')).split('?')[0];
+                    if (!/\.(jpe?g|png|bmp|webp)$/i.test(filename)) {
+                        var extension = (blob.type.split('/')[1] || '').replace('jpeg', 'jpg').replace('svg+xml', '');
+                        if (!/^(jpg|png|bmp|webp)$/i.test(extension)) throw new Error('仅支持 JPG、PNG、BMP、WebP 图片地址');
+                        filename += '.' + extension;
+                    }
+                    if (blob.size < MIN_IMAGE_FILE_BYTES || blob.size > MAX_IMAGE_FILE_BYTES) throw new Error('图片大小需在 30 KB–20 MB 之间');
+                    return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+                }));
+                if (importedFiles.length > 1) {
+                    openBatchTaskFromUpload(importedFiles, 'url');
+                    var countEl = document.getElementById('upload-selection-count');
+                    if (countEl) countEl.textContent = '已选择 ' + importedFiles.length + ' 张图片';
+                } else {
+                    var transfer = new DataTransfer();
+                    transfer.items.add(importedFiles[0]);
+                    fileInput.files = transfer.files;
+                    refreshUploadSelection();
+                }
+                imageUrlInput.value = '';
+            } catch (error) {
+                setUploadError(error.name === 'TypeError' ? '图片地址无法读取，请确认地址可访问，且图片服务器允许跨域访问。' : (error.message || '导入失败，请确认图片地址可公开访问且允许跨域读取'));
+            } finally {
+                imageUrlImport.dataset.loading = 'false';
+                imageUrlImport.textContent = '导入';
+                imageUrlImport.disabled = !imageUrlInput.value.trim();
+            }
+        });
+    }
     document.querySelectorAll('[data-open-batch]').forEach(function (button) {
         button.addEventListener('click', function () {
             var batchNav = document.getElementById('nav-batch-detect');
@@ -295,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
         lastDetails = null;
         lastShortcut = false;
         lastWatermark = null;
+        lastHiddenWatermark = null;
         lastWatermarkIsHidden = false;
         lastVisibleWatermark = null;
         lastContentAnalysis = null;
@@ -335,7 +411,7 @@ document.addEventListener('DOMContentLoaded', function () {
         button.setAttribute('aria-expanded', String(!collapsed));
         content.hidden = collapsed;
         var hint = button.querySelector('.detail-toggle-hint');
-        if (hint) hint.textContent = collapsed ? '点击查看模型明细' : '点击收起模型明细';
+        if (hint) hint.textContent = group.classList.contains('scoring-detail-group') ? (collapsed ? '详情' : '收起') : (collapsed ? '点击查看模型明细' : '点击收起模型明细');
     }
 
     function resetDetailGroups() {
@@ -375,6 +451,11 @@ document.addEventListener('DOMContentLoaded', function () {
             var count = getSelectedModels(root).length;
             status.textContent = count ? ('已选 ' + count + ' 项' + (count === 3 ? '联合检测' : '专项检测')) : '请至少选择 1 项检测';
         }
+        var selectAll = document.getElementById('select-all-models');
+        if (selectAll && root.closest && root.closest('#detect-form')) {
+            selectAll.checked = inputs.length > 0 && Array.prototype.every.call(inputs, function (input) { return input.checked; });
+            selectAll.indeterminate = !selectAll.checked && Array.prototype.some.call(inputs, function (input) { return input.checked; });
+        }
     }
 
     function syncCrimeSceneCards(container) {
@@ -395,9 +476,22 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.upload-model-input').forEach(function (input) {
         input.addEventListener('change', function () { syncModelCards(input.closest('.upload-model-grid')); });
     });
+    var selectAllModels = document.getElementById('select-all-models');
+    if (selectAllModels) {
+        selectAllModels.addEventListener('change', function () {
+            document.querySelectorAll('#single-models .upload-model-input').forEach(function (input) { input.checked = selectAllModels.checked; });
+            syncModelCards(document.getElementById('single-models'));
+        });
+    }
     document.querySelectorAll('.crime-scene-input').forEach(function (input) {
         input.addEventListener('change', function () {
-            syncCrimeSceneCards(input.closest('.crime-scene-grid'));
+            var grid = input.closest('.crime-scene-grid');
+            if (input.checked && grid) {
+                grid.querySelectorAll('.crime-scene-input').forEach(function (otherInput) {
+                    if (otherInput !== input) otherInput.checked = false;
+                });
+            }
+            syncCrimeSceneCards(grid);
             updateBatchStartBtn();
         });
     });
@@ -436,22 +530,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // 水印短路判定：标记并保存水印检测结果（兼容流式/非流式两种返回）
         var hiddenResult = data.hidden_watermark_result || {};
+        lastHiddenWatermark = data.hidden_watermark_result || null;
         var c2paPresent = !!(
             (hiddenResult.c2pa_verification && hiddenResult.c2pa_verification.present) ||
             (hiddenResult.metadata && hiddenResult.metadata.c2pa && hiddenResult.metadata.c2pa.present)
         );
         lastShortcut = !c2paPresent && (!!data.shortcut ||
             !!hiddenResult.detected || !!(data.watermark_result && data.watermark_result.detected));
-        lastWatermarkIsHidden = !!data.hidden_watermark_result;
-        lastWatermark = data.hidden_watermark_result || data.watermark_result || null;
+        lastWatermarkIsHidden = !!hiddenResult.detected;
+        lastWatermark = hiddenResult.detected ? hiddenResult : (data.watermark_result && data.watermark_result.detected ? data.watermark_result : data.hidden_watermark_result || data.watermark_result || null);
         lastVisibleWatermark = data.watermark_result || null;
         aiIdentifierCheckComplete = !data.demo_mode &&
             data.hidden_watermark_result !== undefined && data.watermark_result !== undefined;
 
-        // 获取标签和置信度（SSE 流式返回格式）
+        // 判定结果直接叠加在图片上。
         var labelCode = data.label || 'uncertain';
-        var scorePercent = (data.confidence !== undefined ? data.confidence : 0) * 100;
-        scorePercent = scorePercent.toFixed(2);
 
         // 1. 切换显示
         if (uploadSection) uploadSection.style.display = 'none';
@@ -462,53 +555,18 @@ document.addEventListener('DOMContentLoaded', function () {
         if (contentSubtitle) contentSubtitle.style.display = 'none';
         document.body.classList.add('result-page-active');
         form.classList.add('result-workspace');
-        if (processPanel) processPanel.style.display = '';
+        if (processPanel) processPanel.style.display = lastShortcut ? 'none' : '';
+        ['combined-section', 'npr-section', 'neural-analysis-section', 'df-combined-section', 'df-ela-section', 'df-model-card', 'tp-combined-section', 'tp-forensic-section', 'tp-pf-section', 'watermark-notice', 'content-risk-section'].forEach(function (id) {
+            var section = document.getElementById(id);
+            if (section) section.style.display = 'none';
+        });
         resetDetailGroups();
-        renderDemoNotice(data);
 
         // 2. 填充预览内容
         previewContainer.innerHTML = buildPreview(data);
-        renderAIGeneratedCornerLabel(labelCode === 'ai_generated');
+        renderImageVerdictStamp(labelCode);
         populateAICodePanel();
         setImageResultView('inspection');
-
-        // 3. 设置标签 — 三档判定：AI生成图片 / 疑似AI生成图片 / 真实图片
-        badgeLabel.textContent = data.label_text || labelCode;
-        if (labelCode === 'real') {
-            resultBadge.className = 'result-badge human';
-            badgeSvg.innerHTML = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>';
-        } else if (labelCode === 'suspected_ai') {
-            resultBadge.className = 'result-badge suspected';
-            badgeSvg.innerHTML = '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>';
-        } else {
-            resultBadge.className = 'result-badge ai';
-            badgeSvg.innerHTML = '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>';
-        }
-
-        badgeScore.textContent = '置信度 ' + scorePercent + '%';
-
-        // 水印短路判定提示
-        var shortcutNote = document.getElementById('shortcut-watermark-note');
-        if (data.shortcut && data.watermark_result) {
-            if (!shortcutNote) {
-                shortcutNote = document.createElement('div');
-                shortcutNote.id = 'shortcut-watermark-note';
-                shortcutNote.style.cssText = 'margin-top:12px;padding:12px 16px;background:linear-gradient(135deg,#d1fae5,#a7f3d0);border:1px solid #6ee7b7;border-radius:10px;font-size:14px;color:#065f46;';
-                var wm = data.watermark_result;
-                shortcutNote.innerHTML = '<div style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:4px;">🏷️ 水印快速判定</div>'
-                    + '<div style="font-size:13px;line-height:1.6;">在图像 <b>' + (wm.position || '某区域') + '</b> 检测到 <b>' + (wm.source || '未知平台') + '</b> 水印，已跳过深度推理直接判定为 AI 生成。</div>'
-                    + (wm.detected_text ? '<div style="font-size:12px;color:#047857;margin-top:4px;">识别文本: ' + wm.detected_text + '</div>' : '');
-                var resultSectionEl = document.getElementById('resultSection');
-                if (resultSectionEl) {
-                    var previewAfter = document.getElementById('previewContainer');
-                    if (previewAfter && previewAfter.parentNode) {
-                        previewAfter.parentNode.insertBefore(shortcutNote, previewAfter.nextSibling);
-                    }
-                }
-            }
-        } else if (shortcutNote) {
-            shortcutNote.remove();
-        }
 
         // 展示融合判定结果
         if (lastCombined) {
@@ -543,16 +601,144 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         // 结果工作台会在右栏即时呈现检测信息，无需再单独展开检测过程。
-        if (lastDetails && processBtn) {
+        if (lastDetails) {
             populateProcessPanel();
-            processBtn.style.display = 'none';
-            processBtn.classList.remove('active');
+            if (processBtn) {
+                processBtn.style.display = 'none';
+                processBtn.classList.remove('active');
+            }
         } else if (processBtn) {
             processBtn.style.display = 'none';
         }
+        renderScoringGroups();
+    }
+
+    function renderScoringGroups() {
+        var groups = [
+            { key: 'ai', title: 'AI 全图生成', result: lastCombined, raw: lastNpr, badge: '物理分析 + 神经网络' },
+            { key: 'df', title: '深度伪造', result: lastDeepfakeCombined, raw: lastDeepfake, badge: 'ELA + ViT-B' },
+            { key: 'tp', title: '图像篡改', result: lastTamperCombined, raw: lastTamper, badge: 'TruFor 主模型' }
+        ];
+        function valid(value) { return typeof value === 'number' && isFinite(value); }
+        function clamp(value) { return valid(value) ? Math.max(0, Math.min(1, value)) : 0; }
+        function points(value) { return valid(value) ? (value * 100).toFixed(2) + ' 分' : '未提供'; }
+        function percent(value) { return valid(value) ? (value * 100).toFixed(2) + '%' : '未提供'; }
+        function numeric(value, digits) { return valid(value) ? value.toFixed(digits) : '未提供'; }
+        function tone(value) { return !valid(value) ? 'muted' : value >= 0.6 ? 'danger' : 'safe'; }
+        function metric(label, value, display, color) {
+            return '<div class="analysis-metric"><span>' + escapeHtml(label) + '</span><b>' + escapeHtml(display) + '</b><div class="analysis-metric-track" aria-hidden="true"><i class="' + (valid(value) ? (color || 'neutral') : 'muted') + '" style="width:' + (clamp(value) * 100).toFixed(2) + '%"></i></div></div>';
+        }
+        function ring(value, label) {
+            return '<div class="analysis-gauge ' + tone(value) + '"><div class="analysis-gauge-ring" role="img" aria-label="' + escapeHtml(label + '：' + points(value)) + '" style="--gauge-value:' + (clamp(value) * 100).toFixed(2) + '%"><strong>' + (valid(value) ? (value * 100).toFixed(1) : '--') + '</strong></div><small>' + escapeHtml(label) + '</small></div>';
+        }
+        function card(title, badge, value, metrics, extra, showRing) {
+            return '<article class="analysis-model-card"><header><h4>' + escapeHtml(title) + '</h4><span class="analysis-model-badge">' + escapeHtml(badge) + '</span></header><div class="analysis-model-body">' + (showRing ? ring(value, '分析得分') : '') + '<div class="analysis-metrics">' + metrics + '</div></div>' + (extra || '') + '</article>';
+        }
+        function status(text) { return '<p class="analysis-model-status">' + escapeHtml(text) + '</p>'; }
+        function findComponent(components, name) { return components.find(function (item) { return item.name === name; }); }
+        function modelCards(group, components) {
+            var html = '', raw = group.raw || {};
+            if (group.key === 'ai') {
+                if (group.raw) {
+                    var features = raw.features || {};
+                    var featureDefs = [
+                        ['峰值密度', 'peak_ratio', function (v) { return v * 100; }],
+                        ['频谱平坦度', 'spectral_flatness', function (v) { return (1 - v) * 0.8; }],
+                        ['高频能量比', 'high_freq_ratio', function (v) { return v * 1.5; }],
+                        ['径向方差', 'radial_variance', function (v) { return v * 50; }]
+                    ];
+                    var metrics = featureDefs.map(function (item) {
+                        var value = features[item[1]];
+                        return metric(item[0], valid(value) ? item[2](value) : null, numeric(value, 6), 'purple');
+                    }).join('');
+                    html += card('NPR 噪声模式分析', '物理分析', raw.verdict === 'error' ? null : raw.score, metrics, raw.verdict === 'error' ? status('分析失败') : '', true);
+                    if (raw.physical_fused) {
+                        var dimensions = raw.physical_dimensions || {};
+                        var physicalMetrics = [['采集痕迹弱度', 'camera_trace_weakness'], ['噪声弱度', 'noise_weakness'], ['CFA 弱度', 'cfa_weakness'], ['元数据弱度', 'metadata_weakness']].map(function (item) {
+                            return metric(item[0], dimensions[item[1]], percent(dimensions[item[1]]), 'purple');
+                        }).join('');
+                        html += card('相机成像物证', '物理分析', raw.physical_score, physicalMetrics, '', true);
+                    }
+                }
+                [['univfd', 'UnivFD'], ['probe_dinov2', 'PROBE-DINOv2']].forEach(function (item) {
+                    var model = (lastSpecialized || {})[item[0]];
+                    var component = findComponent(components, item[1]);
+                    if (!model && !component) return;
+                    model = model || {};
+                    var available = model.available !== false && (valid(model.ai_score) || !!component);
+                    var aiScore = available ? (valid(model.ai_score) ? model.ai_score : component.score) : null;
+                    var modelMetrics = metric('AI 生成分', aiScore, percent(aiScore), 'danger') + metric('真实图片分', available ? model.human_score : null, available ? percent(model.human_score) : '未提供', 'safe');
+                    var extra = available ? '' : status('模型不可用');
+                    html += card(model.label || item[1], '神经网络', aiScore, modelMetrics, extra, false);
+                });
+            } else if (group.key === 'df') {
+                var ela = raw.ela;
+                if (ela) {
+                    var metrics = metric('异常像素比', ela.anomaly_ratio, percent(ela.anomaly_ratio), 'danger') + metric('聚集区域比', ela.cluster_ratio, percent(ela.cluster_ratio), 'danger') + metric('平均误差', valid(ela.mean_error) ? ela.mean_error / 15 : null, numeric(ela.mean_error, 2), 'neutral') + metric('误差标准差', valid(ela.std_error) ? ela.std_error / 30 : null, numeric(ela.std_error, 2), 'neutral');
+                    html += card('ELA 压缩误差分析', '辅助分析', ela.verdict === 'error' ? null : ela.score, metrics, ela.verdict === 'error' ? status('分析失败') : group.result.face_detected === false ? status('无人脸，仅供辅助参考') : '', true);
+                }
+                var model = (lastSpecialized || {}).deepfake_detector || {};
+                var component = findComponent(components, '深度伪造人脸模型');
+                var available = model.available !== false && model.verdict !== '检测失败' && (valid(model.deepfake_score) || !!(component && component.available !== false));
+                var fake = available ? (valid(model.deepfake_score) ? model.deepfake_score : component.score) : null;
+                var modelMetrics = metric('深度伪造分', fake, percent(fake), 'danger') + metric('真实图片分', available ? model.real_score : null, available ? percent(model.real_score) : '未提供', 'safe');
+                html += card(model.label || 'DeepFake Detector v2', 'ViT-B', fake, modelMetrics, !available ? status('模型未提供有效评分') : group.result.face_detected === false ? status('无人脸') : '', false);
+            } else {
+                var trufor = raw.trufor || {};
+                var available = trufor.available === true;
+                var metrics = metric('篡改评分', available ? trufor.score : null, available ? points(trufor.score) : '未提供', 'danger') + metric('模型可靠性', available ? trufor.reliability : null, available ? percent(trufor.reliability) : '未提供', 'safe') + metric('异常区域占比', available ? trufor.map_coverage : null, available ? percent(trufor.map_coverage) : '未提供', 'purple');
+                var maps = [];
+                [['map_png', '篡改定位图'], ['confidence_png', '可靠性图']].forEach(function (item) {
+                    if (!available || !trufor[item[0]]) return;
+                    var image = document.createElement('img');
+                    image.src = trufor[item[0]];
+                    image.alt = 'TruFor ' + item[1];
+                    image.className = 'analysis-localization-image';
+                    maps.push('<figure>' + image.outerHTML + '<figcaption>' + item[1] + '</figcaption></figure>');
+                });
+                var extra = available ? '' : status('模型不可用');
+                if (maps.length) extra += '<div class="analysis-localization-grid">' + maps.join('') + '</div>';
+                html += card('TruFor 篡改定位', '主模型', available ? trufor.score : null, metrics, extra, true);
+                [['copy_move', '复制移动分析'], ['block_noise', '区块噪声分析']].forEach(function (item) {
+                    var evidence = raw[item[0]];
+                    if (!evidence) return;
+                    var metrics = metric('辅助评分', evidence.score, points(evidence.score), 'purple');
+                    if (item[0] === 'copy_move') metrics += metric('匹配点数量', valid(evidence.match_count) ? evidence.match_count / 200 : null, numeric(evidence.match_count, 0), 'neutral');
+                    if (item[0] === 'block_noise') metrics += metric('噪声离散度', valid(evidence.dispersion) ? evidence.dispersion * 5 : null, numeric(evidence.dispersion, 4), 'neutral');
+                    html += card(item[1], '辅助证据', evidence.score, metrics, '', false);
+                });
+            }
+            return html;
+        }
+        groups.forEach(function (group) {
+            var container = document.getElementById(group.key + '-detail-group');
+            var score = document.getElementById(group.key + '-detail-score');
+            var detail = document.getElementById(group.key + '-scoring-process');
+            if (!container || !detail || !score) return;
+            container.style.display = '';
+            var result = group.result;
+            if (lastShortcut || !result) {
+                score.textContent = lastShortcut ? '已跳过' : '未检测';
+                detail.innerHTML = '<div class="analysis-empty-state">' + (lastShortcut ? '已根据水印或平台标识完成判定，本次未执行该项模型评分。具体依据见水印核验结果。' : '本次未执行该项检测，没有可展示的评分过程。') + '</div>';
+                return;
+            }
+            var scoring = result.scoring || {};
+            var components = scoring.components || [];
+            var unavailable = group.key === 'tp' && result.model_score == null;
+            var noFace = group.key === 'df' && result.face_detected === false;
+            var state = unavailable || noFace ? 'muted' : valid(scoring.threshold) ? ((scoring.operator === '>' ? result.final_score > scoring.threshold : result.final_score >= scoring.threshold) ? 'danger' : 'safe') : tone(result.final_score);
+            var scoreLabel = unavailable ? '不可用' : noFace ? '无人脸' : points(result.final_score);
+            score.textContent = scoreLabel;
+            var html = '<div class="analysis-category-divider"><span>' + group.title + '专项检测</span></div>';
+            html += '<section class="analysis-verdict-card ' + state + '"><header><h4>' + group.title + '综合判定</h4><span class="analysis-verdict-badge">' + group.badge + '</span></header><div class="analysis-verdict-main"><span>综合得分</span><strong>' + (unavailable || noFace ? '--' : valid(result.final_score) ? (result.final_score * 100).toFixed(2) : '--') + '</strong><small>分</small><b>' + escapeHtml(result.final_verdict || '等待判定') + '</b></div>';
+            html += '</section>' + modelCards(group, components);
+            detail.innerHTML = html;
+        });
     }
 
     function buildPreview(data) {
+        if (resultPreviewUrl) URL.revokeObjectURL(resultPreviewUrl);
+        resultPreviewUrl = null;
         // 已上传文件 → 图片预览
         if (data.filename && fileInput && fileInput.files.length > 0) {
             var file = fileInput.files[0];
@@ -561,7 +747,8 @@ document.addEventListener('DOMContentLoaded', function () {
             // 图片预览
             if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].indexOf(ext) !== -1) {
                 var img = document.createElement('img');
-                img.src = URL.createObjectURL(file);
+                resultPreviewUrl = URL.createObjectURL(file);
+                img.src = resultPreviewUrl;
                 img.alt = file.name;
                 return img.outerHTML;
             }
@@ -573,28 +760,59 @@ document.addEventListener('DOMContentLoaded', function () {
                 '</div>';
         }
 
-        return '';
+        return '<p class="preview-empty">暂无图片预览，请重新上传图片</p>';
     }
 
-    function renderAIGeneratedCornerLabel(isAIGenerated) {
+    function renderImageVerdictStamp(labelCode) {
         if (!previewContainer) return;
-        var oldLabel = previewContainer.querySelector('.ai-generated-corner-label');
+        if (resultStampObserver) resultStampObserver.disconnect();
+        resultStampObserver = null;
+        var oldLabel = previewContainer.querySelector('.image-verdict-stamp');
         if (oldLabel) oldLabel.remove();
-        if (!isAIGenerated) return;
-
+        var image = previewContainer.querySelector('img');
+        if (!image) return;
+        var verdicts = {
+            real: { text: '真实图片', style: 'real' },
+            ai_generated: { text: '含AI生成合成', style: 'forged' },
+            suspected_ai: { text: '疑似AI合成', style: 'suspected' }
+        };
+        var verdict = verdicts[labelCode] || { text: '待核验', style: 'uncertain' };
         var label = document.createElement('div');
-        label.className = 'ai-generated-corner-label';
+        label.className = 'image-verdict-stamp stamp-' + verdict.style;
         label.setAttribute('role', 'status');
-        label.setAttribute('aria-label', '检测结论：AI 生成图片');
-        label.innerHTML = '<span class="ai-generated-corner-icon">AI</span><strong>AI 生成</strong>';
+        label.setAttribute('aria-label', '检测结论：' + verdict.text);
+        label.innerHTML = '<svg class="verdict-stamp-ring" viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="67"/><circle class="verdict-stamp-inner" cx="80" cy="80" r="51"/><g class="verdict-stamp-stars"><text x="80" y="35">★</text><text x="43" y="49">★</text><text x="117" y="49">★</text><text x="80" y="139">★</text><text x="43" y="125">★</text><text x="117" y="125">★</text></g></svg>';
+        var ribbon = document.createElement('strong');
+        ribbon.className = 'verdict-stamp-ribbon';
+        ribbon.textContent = verdict.text;
+        label.appendChild(ribbon);
         previewContainer.appendChild(label);
+
+        function positionStamp() {
+            if (!image.naturalWidth || !image.naturalHeight) return;
+            // object-fit 留出的空白不属于图片，把印章贴在实际图片边界内。
+            var scale = Math.min(image.clientWidth / image.naturalWidth, image.clientHeight / image.naturalHeight);
+            var insetX = (image.clientWidth - image.naturalWidth * scale) / 2;
+            var insetY = (image.clientHeight - image.naturalHeight * scale) / 2;
+            label.style.top = (image.offsetTop + insetY + 16) + 'px';
+            label.style.right = (previewContainer.clientWidth - image.offsetLeft - image.clientWidth + insetX + 16) + 'px';
+        }
+        image.addEventListener('load', positionStamp, { once: true });
+        if (typeof ResizeObserver !== 'undefined') {
+            resultStampObserver = new ResizeObserver(positionStamp);
+            resultStampObserver.observe(previewContainer);
+        }
+        positionStamp();
     }
 
     // ==================== AI 标识编码核验 ====================
     function setImageResultView(view) {
         var isCode = view === 'code';
         if (imagePreviewView) imagePreviewView.hidden = isCode;
-        if (aiCodePanel) aiCodePanel.hidden = !isCode;
+        if (aiCodePanel) {
+            aiCodePanel.hidden = !isCode;
+            aiCodePanel.style.display = isCode ? '' : 'none';
+        }
         if (inspectionTab) {
             inspectionTab.classList.toggle('active', !isCode);
             inspectionTab.setAttribute('aria-selected', String(!isCode));
@@ -606,7 +824,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function populateAICodePanel() {
-        var hidden = lastWatermark || {};
+        var hidden = lastHiddenWatermark || {};
         var tc260 = hidden.tc260 || {};
         var fields = tc260.fields || {};
         var visible = lastVisibleWatermark || {};
@@ -664,6 +882,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     throw new Error((payload && payload.msg) || '标识核验未返回结果');
                 }
                 lastWatermark = payload.data.hidden_watermark_result || null;
+                lastHiddenWatermark = payload.data.hidden_watermark_result || null;
                 lastWatermarkIsHidden = !!payload.data.hidden_watermark_result;
                 lastVisibleWatermark = payload.data.watermark_result || null;
                 aiIdentifierCheckComplete = true;
@@ -740,6 +959,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // 清除 upload-area 中的图片预览，恢复初始状态
     function clearUploadPreview() {
         if (!uploadArea) return;
+        if (resultStampObserver) resultStampObserver.disconnect();
+        resultStampObserver = null;
+        if (resultPreviewUrl) URL.revokeObjectURL(resultPreviewUrl);
+        resultPreviewUrl = null;
         uploadArea.classList.remove('has-preview');
         if (uploadPreviewUrl) URL.revokeObjectURL(uploadPreviewUrl);
         uploadPreviewUrl = null;
@@ -842,15 +1065,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // 2. 进度条
         var items = [
-            { id: 'ai', score: aiScore, name: 'AI全图生成检测', high: '图片整体由扩散模型/GAN 合成的可能性' },
-            { id: 'df', score: dfScore, name: '深度换脸检测', high: '面部区域被 AI 替换/伪造的可能性' },
-            { id: 'sp', score: spScore, name: '图像篡改', high: '图片存在局部区域拼接、复制粘贴等篡改痕迹' }
+            { id: 'ai', score: aiScore, available: !!lastCombined, name: 'AI全图生成检测', high: '图片整体由扩散模型/GAN 合成的可能性' },
+            { id: 'df', score: dfScore, available: !!lastDeepfakeCombined, name: '深度换脸检测', high: '面部区域被 AI 替换/伪造的可能性' },
+            { id: 'sp', score: spScore, available: !!lastTamperCombined, name: '图像篡改', high: '图片存在局部区域拼接、复制粘贴等篡改痕迹' }
         ];
 
         items.forEach(function (item) {
             var elScore = document.getElementById('proc-' + item.id + '-score');
             var elFill  = document.getElementById('proc-' + item.id + '-fill');
             var elDesc  = document.getElementById('proc-' + item.id + '-desc');
+            if (!item.available) {
+                if (elScore) elScore.textContent = '未检测';
+                if (elFill) elFill.style.width = '0%';
+                if (elDesc) { elDesc.textContent = '该项未执行'; elDesc.style.color = '#8592a6'; }
+                return;
+            }
             var pct = (item.score * 100).toFixed(1);
 
             if (elScore) elScore.textContent = pct + '分';
@@ -974,6 +1203,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // 顶部雷达图 + 三条得分条
         var topRow = document.querySelector('.process-panel .process-top-row');
         if (topRow) topRow.style.display = show;
+        var content = document.querySelector('.process-panel .process-content');
+        if (content) content.style.display = show;
 
         // 专项明细折叠标题在水印快捷判定时也一并隐藏。
         ['ai-detail-group', 'df-detail-group', 'tp-detail-group'].forEach(function (id) {
@@ -989,7 +1220,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ];
         ids.forEach(function (id) {
             var el = document.getElementById(id);
-            if (el) el.style.display = show;
+            if (el && !visible) el.style.display = 'none';
         });
 
         // 路径分隔线（三条专项检测标题）
@@ -1184,11 +1415,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var modelRows = [
             { key: 'univfd', rowId: 'neural-univfd-row', scoreId: 'neural-univfd-score', fillId: 'neural-univfd-fill' },
-            { key: 'aide', rowId: 'neural-aide-row', scoreId: 'neural-aide-score', fillId: 'neural-aide-fill' },
-            { key: 'dear_r', rowId: 'neural-dear-r-row', scoreId: 'neural-dear-r-score', fillId: 'neural-dear-r-fill' },
             { key: 'probe_dinov2', rowId: 'neural-probe-row', scoreId: 'neural-probe-score', fillId: 'neural-probe-fill' }
         ];
-        var weights = { univfd: 0.20, aide: 0.35, dear_r: 0.15, probe_dinov2: 0.30 };
+        var weights = { univfd: 0.20, probe_dinov2: 0.30 };
         var weightedScore = 0;
         var weightTotal = 0;
 
@@ -1287,8 +1516,6 @@ document.addEventListener('DOMContentLoaded', function () {
             var neuralContribution = combined.neural_contribution;
             if (neuralContribution === undefined || neuralContribution === null) {
                 neuralContribution = (combined.univfd_contribution || 0)
-                    + (combined.aide_contribution || 0)
-                    + (combined.dear_r_contribution || 0)
                     + (combined.probe_contribution || 0);
             }
             neuralEl.textContent = (neuralContribution * 100).toFixed(1) + ' 分';
@@ -1586,7 +1813,6 @@ document.addEventListener('DOMContentLoaded', function () {
     // ========== SSE 流式检测（图像专用，含进度条） ==========
 
     function startImageDetection(formData) {
-        _demoFallbackActive = false;
         detectBtn.disabled = true;
         detectBtn.textContent = '检测中...';
         resetProgressUI();
@@ -1597,18 +1823,29 @@ document.addEventListener('DOMContentLoaded', function () {
             body: formData
         }).then(function (response) {
             if (!response.ok) {
-                showDemoResult('检测服务响应异常（' + response.status + '）');
+                return response.text().then(function (body) {
+                    var message = '检测接口请求失败（HTTP ' + response.status + '），请稍后重试';
+                    try {
+                        var errorData = JSON.parse(body);
+                        message = errorData.msg || errorData.message || message;
+                    } catch (error) {}
+                    showProgressError(message);
+                });
+            }
+            if (!response.body) {
+                showProgressError('检测接口未返回数据，请重试');
                 return;
             }
             var reader = response.body.getReader();
             var decoder = new TextDecoder();
             var buffer = '';
+            var streamEnded = false;
 
             function readStream() {
                 return reader.read().then(function (chunk) {
                     if (chunk.done) {
-                        if (buffer.trim()) {
-                            showProgressError('连接意外断开，请重试');
+                        if (!streamEnded) {
+                            showProgressError('检测连接已断开，未收到完整结果，请重试');
                         }
                         return;
                     }
@@ -1624,147 +1861,105 @@ document.addEventListener('DOMContentLoaded', function () {
                             else if (line.indexOf('data: ') === 0) eventData = line.slice(6);
                         });
                         if (eventType && eventData) {
-                            try { handleSSEEvent(eventType, JSON.parse(eventData)); }
+                            try {
+                                handleSSEEvent(eventType, JSON.parse(eventData));
+                                if (eventType === 'done' || eventType === 'error') streamEnded = true;
+                            }
                             catch (e) { console.warn('SSE解析失败:', e); }
                         }
                     });
                     return readStream();
                 }).catch(function (err) {
-                    showDemoResult('检测服务连接中断');
+                    if (!streamEnded) showProgressError('检测服务连接中断，请重试');
                 });
             }
             return readStream();
         }).catch(function (err) {
-            showDemoResult('未连接到检测服务');
+            showProgressError('无法连接本地检测服务，请确认服务已启动后重试');
         });
-    }
-
-    // 测试环境中检测服务不可用时，用固定演示数据完整渲染结果工作台。
-    // 该分支不调用后端，且会在页面中明确标注为演示结果。
-    function createDemoDetectionResult() {
-        return {
-            demo_mode: true,
-            label: 'suspected_ai',
-            label_text: '疑似AI生成图片',
-            confidence: 0.6565,
-            filename: fileInput && fileInput.files.length ? fileInput.files[0].name : '演示图片',
-            details: { ai_generated: 0.6565 },
-            npr: {
-                score: 0.592,
-                verdict: 'ai_likely',
-                features: { peak_ratio: 0.0012, spectral_flatness: 0.58, high_freq_ratio: 0.13, radial_variance: 0.021 },
-                raw_noise_score: 0.56,
-                physical_dimensions: { noise_weakness: 0.61, cfa_weakness: 0.54, camera_trace_weakness: 0.49, metadata_weakness: 0.32 }
-            },
-            specialized_models: {
-                univfd: { available: true, ai_score: 0.68 },
-                aide: { available: true, ai_score: 0.64 },
-                dear_r: { available: true, ai_score: 0.62 },
-                probe_dinov2: { available: true, ai_score: 0.69 },
-                deepfake_detector: { available: true, deepfake_score: 0.427, real_score: 0.573 }
-            },
-            combined: {
-                final_score: 0.6565,
-                final_verdict: '疑似AI生成图片',
-                fusion_mode: '图像物理分析 + 神经网络分析',
-                npr_contribution: 0.296,
-                neural_contribution: 0.3605
-            },
-            deepfake: {
-                ela: { score: 0.427, verdict: 'uncertain', anomaly_ratio: 0.163, cluster_ratio: 0.108, mean_error: 7.25, std_error: 4.18 }
-            },
-            deepfake_combined: {
-                final_score: 0.427,
-                final_verdict: '中等风险',
-                zero_contribution: 0.212,
-                model_contribution: 0.215,
-                face_detected: true
-            },
-            tamper: {
-                copy_move: { score: 0.506, match_count: 38, match_density: 0.031 },
-                block_noise: { score: 0.506, dispersion: 0.085, mean_score: 0.506 },
-                patch_feature: { score: 0.506, verdict: 'uncertain', mean_similarity: 0.741, min_similarity: 0.628, anomaly_ratio: 0.174 }
-            },
-            tamper_combined: {
-                final_score: 0.506,
-                final_verdict: '中等风险',
-                cm_contribution: 0.178,
-                bn_contribution: 0.164,
-                pf_contribution: 0.164
-            },
-            content_analysis: {
-                status: 'demo',
-                risk_level: '低',
-                scene_description: '演示图片内容分析：该区域用于验证检测结果页面的内容、标签与信息层级展示。',
-                content_tags: ['人物'],
-                risk_tags: [{ tag: '未发现知识库高风险内容', level: '低' }],
-                matched_knowledge: ['未识别'],
-                evidence: ['当前为本地演示数据，未执行真实视觉识别。'],
-                recommended_checks: ['恢复检测服务后，请重新上传图片获取真实检测结论。'],
-                ocr_text: []
-            },
-            watermark_result: { detected: false, detail: '演示模式未执行可见水印检测' },
-            hidden_watermark_result: { detected: false, tc260: {}, c2pa_verification: { present: false } }
-        };
-    }
-
-    function renderDemoNotice(data) {
-        var oldNotice = document.getElementById('demo-result-notice');
-        if (oldNotice) oldNotice.remove();
-        if (!data || !data.demo_mode || !processPanel) return;
-        var notice = document.createElement('div');
-        notice.id = 'demo-result-notice';
-        notice.className = 'demo-result-notice';
-        notice.innerHTML = '<strong>演示数据</strong><span>检测服务未连接，以下结果仅用于检查页面布局，不代表真实检测结论。</span>';
-        var title = processPanel.querySelector('.process-title');
-        if (title) title.insertAdjacentElement('afterend', notice);
-    }
-
-    function showDemoResult(reason) {
-        if (_demoFallbackActive) return;
-        _demoFallbackActive = true;
-        updateProgressUI({ step: 7, percent: 100, stepName: '完成', message: '已加载演示结果', detail: reason + '，正在展示页面预览。' });
-        if (progressErrorMsg) progressErrorMsg.style.display = 'none';
-        if (progressRetryBtn) progressRetryBtn.style.display = 'none';
-        setTimeout(function () { finishDetection(createDemoDetectionResult()); }, 350);
     }
 
     function handleSSEEvent(type, data) {
         switch (type) {
             case 'progress': updateProgressUI(data); break;
             case 'result': _pendingResult = data; break;
-            case 'done': if (!_demoFallbackActive) finishDetection(_pendingResult); break;
-            // GPU 服务未启动等后端检测错误同样进入演示结果，便于离线核对布局。
-            case 'error': showDemoResult(data.message || '检测服务返回错误'); break;
+            case 'done':
+                if (_pendingResult) finishDetection(_pendingResult);
+                else showProgressError('检测结束但未收到结果，请重试');
+                break;
+            case 'error': showProgressError(data.message || '检测服务返回错误'); break;
         }
     }
 
     var _pendingResult = null;
-    var _demoFallbackActive = false;
+
+    function stopProgressTimer() {
+        if (progressTimer) clearInterval(progressTimer);
+        progressTimer = null;
+    }
+
+    function progressTimeText() {
+        var seconds = Math.max(0, Math.floor((Date.now() - progressStartedAt) / 1000));
+        return String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+    }
+
+    function appendProgressActivity(message) {
+        if (!message || message === progressLastMessage) return;
+        progressLastMessage = message;
+        var item = document.createElement('li');
+        var time = document.createElement('span');
+        time.className = 'progress-log-time';
+        time.textContent = progressTimeText();
+        var text = document.createElement('span');
+        text.textContent = message;
+        item.appendChild(time);
+        item.appendChild(text);
+        progressActivityList.appendChild(item);
+        while (progressActivityList.children.length > 3) progressActivityList.firstElementChild.remove();
+    }
 
     function updateProgressUI(data) {
-        progressBarFill.style.width = data.percent + '%';
-        if (data.stepName === '完成') {
-            progressTitleText.textContent = '✅ 检测完成';
-        } else {
-            progressTitleText.textContent = data.message || '正在深度分析中…';
-        }
-        progressSubText.textContent = data.detail || '';
+        var complete = data.stepName === '完成';
+        progressValue = Math.max(progressValue, Math.min(100, Math.max(0, Number(data.percent) || 0)));
+        progressBarFill.style.width = progressValue + '%';
+        progressPercent.innerHTML = Math.round(progressValue) + '<span>%</span>';
+        progressBar.setAttribute('aria-valuenow', Math.round(progressValue));
+        var titles = { '水印检测': '正在核验水印与平台标识', 'GPU推理': '正在进行模型推理', 'AI全图生成': '正在分析 AI 生成痕迹', 'DeepFake': '正在分析人脸伪造痕迹', '图像篡改': '正在检查图像篡改痕迹', '融合判定': '正在汇总鉴定证据', '水印判定': '正在汇总鉴定证据', '内容研判': '正在研判图片内容' };
+        progressTitleText.textContent = complete ? '图像鉴定完成' : (titles[data.stepName] || '正在分析图片');
+        progressSubText.textContent = [data.message, data.detail].filter(Boolean).join(' · ') || '正在处理，请稍候…';
+        appendProgressActivity(data.message || data.detail);
 
+        var stageMap = { '水印检测': 'watermark', 'GPU推理': 'gpu', 'AI全图生成': 'ai', 'DeepFake': 'deepfake', '图像篡改': 'tamper', '融合判定': 'fusion', '水印判定': 'fusion', '内容研判': 'content' };
+        var states = data.stages || {};
+        var statusText = { pending: '等待中', active: '分析中', done: '已完成', skipped: '已跳过', warning: '部分不可用', error: '已中断' };
+        var handled = 0;
+        var skipped = 0;
         var stepDots = progressStepsRow.querySelectorAll('.progress-step-dot');
         stepDots.forEach(function (dot) {
-            var stepNum = parseInt(dot.getAttribute('data-step'));
-            dot.classList.remove('active', 'done');
-            if (stepNum < data.step) dot.classList.add('done');
-            else if (stepNum === data.step) dot.classList.add('active');
+            var key = dot.getAttribute('data-stage');
+            var state = states[key] || (dot.classList.contains('done') ? 'done' : 'pending');
+            if (!data.stages) {
+                if (dot.classList.contains('active')) state = 'done';
+                if (key === stageMap[data.stepName]) state = 'active';
+                if (complete && state === 'pending') state = 'skipped';
+            }
+            if (!statusText[state]) state = 'pending';
+            dot.classList.remove('active', 'done', 'skipped', 'warning', 'error');
+            if (state !== 'pending') dot.classList.add(state);
+            dot.querySelector('.pstep-circle').textContent = state === 'done' ? '✓' : state === 'skipped' ? '−' : state === 'warning' || state === 'error' ? '!' : dot.getAttribute('data-step');
+            dot.querySelector('.pstep-status').textContent = statusText[state];
+            dot.setAttribute('aria-label', dot.querySelector('.pstep-label').textContent + '：' + statusText[state]);
+            if (state === 'done' || state === 'skipped' || state === 'warning') handled++;
+            if (state === 'skipped') skipped++;
         });
-
-        var icons = { '水印检测': '🏷️', '水印判定': '🏷️', 'GPU推理': '🧠', 'AI全图生成': '🎵', 'DeepFake': '🔍', '图像篡改': '🖼️', '融合判定': '🔬', '内容研判': '🏷️', '完成': '✅' };
-        progressStepIcon.textContent = icons[data.stepName] || '🔍';
-
-        if (data.stepName === '完成') {
-            document.querySelector('.progress-rings').style.display = 'none';
-            progressStepIcon.style.fontSize = '32px';
+        progressStageCount.textContent = '已处理 ' + handled + ' / 7 项' + (skipped ? ' · 跳过 ' + skipped + ' 项' : '');
+        var icons = { '水印检测': '⌕', 'GPU推理': '◈', 'AI全图生成': '✧', 'DeepFake': '◎', '图像篡改': '▧', '融合判定': '≋', '水印判定': '≋', '内容研判': '⌕', '完成': '✓' };
+        progressStepIcon.textContent = icons[data.stepName] || '◎';
+        if (complete) {
+            stopProgressTimer();
+            progressModal.classList.add('is-complete');
+            progressStatus.textContent = '鉴定完成';
+            progressFootnote.textContent = '分析已完成，正在展示鉴定结果';
         }
     }
 
@@ -1772,11 +1967,22 @@ document.addEventListener('DOMContentLoaded', function () {
         progressErrorMsg.textContent = msg;
         progressErrorMsg.style.display = 'block';
         progressRetryBtn.style.display = 'block';
-        progressTitleText.textContent = '⚠️ 检测中断';
-        progressSubText.textContent = '';
-        progressBarFill.style.width = '0%';
-        document.querySelector('.progress-rings').style.display = 'none';
-        progressStepIcon.textContent = '⚠️';
+        stopProgressTimer();
+        progressModal.classList.add('is-error');
+        progressStatus.textContent = '检测中断';
+        progressTitleText.textContent = '鉴定暂时中断';
+        progressSubText.textContent = '检测未完成，可以重试';
+        progressFootnote.textContent = '当前进度已保留，重试后将重新开始鉴定';
+        progressStepIcon.textContent = '!';
+        progressStepsRow.querySelectorAll('.active').forEach(function (dot) {
+            dot.classList.remove('active');
+            dot.classList.add('error');
+            dot.querySelector('.pstep-circle').textContent = '!';
+            dot.querySelector('.pstep-status').textContent = '已中断';
+            dot.setAttribute('aria-label', dot.querySelector('.pstep-label').textContent + '：已中断');
+        });
+        appendProgressActivity('检测中断：' + msg);
+        progressRetryBtn.focus();
         // 失败后必须恢复按钮状态；否则 requestSubmit 会被 submit 处理器直接拦截。
         if (detectBtn) {
             detectBtn.disabled = false;
@@ -1793,26 +1999,56 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function resetProgressUI() {
+        stopProgressTimer();
+        progressStartedAt = Date.now();
+        progressValue = 0;
+        progressLastMessage = '';
+        progressPreviousFocus = document.activeElement;
+        progressModal.classList.remove('is-complete', 'is-error');
+        progressStatus.textContent = '正在分析';
+        progressPercent.innerHTML = '0<span>%</span>';
+        progressBar.setAttribute('aria-valuenow', '0');
+        progressStageCount.textContent = '准备分析';
+        progressFootnote.textContent = '正在逐项核验图片，分析完成后将自动展示鉴定结果';
+        progressActivityList.textContent = '';
+        appendProgressActivity('正在准备图片与检测模型');
+        progressElapsed.textContent = '已用时 0 秒';
+        progressTimer = setInterval(function () {
+            var seconds = Math.floor((Date.now() - progressStartedAt) / 1000);
+            progressElapsed.textContent = '已用时 ' + (seconds < 60 ? seconds + ' 秒' : Math.floor(seconds / 60) + ' 分 ' + seconds % 60 + ' 秒');
+        }, 1000);
         progressBarFill.style.width = '0%';
-        progressTitleText.textContent = '正在深度分析中…';
-        progressSubText.textContent = '准备连接服务…';
-        progressStepIcon.textContent = '🔍';
-        progressStepIcon.style.fontSize = '20px';
+        progressTitleText.textContent = '准备开始鉴定';
+        progressSubText.textContent = '正在连接检测服务，请稍候…';
+        progressStepIcon.textContent = '◎';
         progressErrorMsg.style.display = 'none';
         progressRetryBtn.style.display = 'none';
-        document.querySelector('.progress-rings').style.display = 'block';
+        if (uploadPreviewUrl) {
+            progressImage.src = uploadPreviewUrl;
+            progressImage.style.display = '';
+        } else {
+            progressImage.removeAttribute('src');
+            progressImage.style.display = 'none';
+        }
         _pendingResult = null;
         var stepDots = progressStepsRow.querySelectorAll('.progress-step-dot');
-        stepDots.forEach(function (dot) { dot.classList.remove('active', 'done'); });
+        stepDots.forEach(function (dot) {
+            dot.classList.remove('active', 'done', 'skipped', 'warning', 'error');
+            dot.querySelector('.pstep-circle').textContent = dot.getAttribute('data-step');
+            dot.querySelector('.pstep-status').textContent = '等待中';
+            dot.setAttribute('aria-label', dot.querySelector('.pstep-label').textContent + '：等待中');
+        });
     }
 
     function finishDetection(resultData) {
+        stopProgressTimer();
         setTimeout(function () {
             progressOverlay.style.display = 'none';
             detectBtn.disabled = false;
             detectBtn.textContent = '开始检测';
             if (resultData) { showResult(resultData); }
             else { alert('检测完成但未获取到结果数据'); }
+            if (progressPreviousFocus && document.contains(progressPreviousFocus)) progressPreviousFocus.focus();
         }, 800);
     }
 
@@ -1844,8 +2080,6 @@ document.addEventListener('DOMContentLoaded', function () {
     var batchView = document.getElementById('batch-view');
     var skillView = document.getElementById('skill-view');
     var skillViewTitle = document.getElementById('skill-view-title');
-    var skillViewSubtitle = document.getElementById('skill-view-subtitle');
-    var skillFrontmatter = document.getElementById('skill-frontmatter');
     var skillDocument = document.getElementById('skill-document');
     var skillTocTitle = document.getElementById('skill-toc-title');
     var skillTocLinks = document.getElementById('skill-toc-links');
@@ -1952,6 +2186,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var listType = '';
         var tableOpen = false;
         var sectionOpen = false;
+        var codeBlockOpen = false;
         var toc = [];
         function closeBlocks() {
             if (listType) { html += '</' + listType + '>'; listType = ''; }
@@ -1959,7 +2194,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         source.split(/\r?\n/).forEach(function (rawLine) {
             var line = rawLine.trim();
+            if (/^```/.test(line)) {
+                closeBlocks();
+                html += codeBlockOpen ? '</code></pre>' : '<pre><code>';
+                codeBlockOpen = !codeBlockOpen;
+                return;
+            }
+            if (codeBlockOpen) {
+                html += escapeSkillHtml(rawLine) + '\n';
+                return;
+            }
             if (!line) { closeBlocks(); return; }
+            if (/^-{3,}$/.test(line)) { closeBlocks(); html += '<hr>'; return; }
             if (/^#\s+/.test(line)) return;
             if (/^##\s+/.test(line)) {
                 closeBlocks();
@@ -1974,6 +2220,16 @@ document.addEventListener('DOMContentLoaded', function () {
             if (/^###\s+/.test(line)) {
                 closeBlocks();
                 html += '<h3>' + formatSkillInline(line.replace(/^###\s+/, '')) + '</h3>';
+                return;
+            }
+            if (/^####\s+/.test(line)) {
+                closeBlocks();
+                html += '<h4>' + formatSkillInline(line.replace(/^####\s+/, '')) + '</h4>';
+                return;
+            }
+            if (/^>\s?/.test(line)) {
+                closeBlocks();
+                html += '<blockquote>' + formatSkillInline(line.replace(/^>\s?/, '')) + '</blockquote>';
                 return;
             }
             if (/^\|/.test(line)) {
@@ -1998,6 +2254,7 @@ document.addEventListener('DOMContentLoaded', function () {
             html += '<p>' + formatSkillInline(line) + '</p>';
         });
         closeBlocks();
+        if (codeBlockOpen) html += '</code></pre>';
         return { frontmatter: frontmatter, html: html + (sectionOpen ? '</section>' : ''), toc: toc };
     }
 
@@ -2010,9 +2267,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (skillView) skillView.style.display = '';
         if (contentHeader) contentHeader.style.display = 'none';
         if (skillViewTitle) skillViewTitle.textContent = '正在加载 Skill…';
-        if (skillViewSubtitle) skillViewSubtitle.textContent = '读取专项图像鉴别规则';
-        if (skillFrontmatter) skillFrontmatter.textContent = '正在读取 Skill 定义…';
-        if (skillDocument) skillDocument.innerHTML = '';
+        if (skillDocument) skillDocument.textContent = '正在读取专项鉴别内容…';
         if (skillDocument) skillDocument.style.display = '';
         if (skillTocLinks) skillTocLinks.innerHTML = '';
         if (skillTocTitle) skillTocTitle.textContent = '鉴别 Skills';
@@ -2032,8 +2287,6 @@ document.addEventListener('DOMContentLoaded', function () {
             activeSkillData = data;
             if (skillEditButton) skillEditButton.style.display = data.editable === false ? 'none' : '';
             if (skillViewTitle) skillViewTitle.textContent = data.title || '图像鉴别 Skill';
-            if (skillViewSubtitle) skillViewSubtitle.textContent = (data.skill_name || skillKey) + ' / Markdown condensed view';
-            if (skillFrontmatter) skillFrontmatter.textContent = rendered.frontmatter || data.summary || '未提供 Skill 定义';
             if (skillDocument) skillDocument.innerHTML = rendered.html || '<p>暂无可展示的 Skill 内容。</p>';
             if (skillTocLinks) {
                 skillTocLinks.innerHTML = Object.keys(skillMenu).map(function (key) {
@@ -2070,8 +2323,7 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(function () {
                 if (activeSkillRequest !== skillKey) return;
                 if (skillViewTitle) skillViewTitle.textContent = 'Skill 暂不可用';
-                if (skillViewSubtitle) skillViewSubtitle.textContent = '请确认本机技能文件已安装后重试';
-                if (skillFrontmatter) skillFrontmatter.textContent = '未能读取对应的专项鉴别 Skill。';
+                if (skillDocument) skillDocument.textContent = '未能读取对应的专项鉴别内容，请稍后重试。';
             });
     }
 
@@ -2093,9 +2345,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (skillView) skillView.style.display = '';
         if (contentHeader) contentHeader.style.display = 'none';
         if (skillViewTitle) skillViewTitle.textContent = '专项图像鉴别 Skills';
-        if (skillViewSubtitle) skillViewSubtitle.textContent = '涉诈、涉谣、涉黄 AI 图片鉴别规则 / Markdown document view';
-        if (skillFrontmatter) skillFrontmatter.textContent = '正在读取 3 份专项鉴别 Skill…';
-        if (skillDocument) skillDocument.innerHTML = '';
+        if (skillDocument) skillDocument.textContent = '正在读取专项鉴别内容…';
         if (skillTocLinks) skillTocLinks.innerHTML = '';
         if (skillDensityToggle) {
             skillDensityToggle.setAttribute('aria-pressed', 'true');
@@ -2127,10 +2377,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 return '<section class="skill-group" id="skill-' + key + '">'
                     + '<header class="skill-group-header"><span>Skill ' + (index + 1) + '</span><h2>' + escapeSkillHtml(data.title) + '</h2><p>' + escapeSkillHtml(data.summary || '') + '</p></header>'
-                    + '<pre class="skill-group-frontmatter">' + escapeSkillHtml(rendered.frontmatter || '') + '</pre>'
                     + '<div class="skill-group-document">' + (rendered.html || '<p>暂无内容。</p>') + '</div></section>';
             });
-            if (skillFrontmatter) skillFrontmatter.textContent = '本页汇集 3 份专项图像鉴别 Skill。通过右侧目录可跳转至对应 Skill 或具体章节。';
             if (skillDocument) skillDocument.innerHTML = groups.join('');
             if (skillTocLinks) {
                 skillTocLinks.innerHTML = allToc.map(function (item) {
@@ -2143,7 +2391,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }).catch(function () {
             if (activeSkillRequest !== 'all-special-skills') return;
             if (skillViewTitle) skillViewTitle.textContent = 'Skill 暂不可用';
-            if (skillFrontmatter) skillFrontmatter.textContent = '未能读取全部专项鉴别 Skill，请确认本机技能文件已安装。';
+            if (skillDocument) skillDocument.textContent = '未能读取全部专项鉴别内容，请稍后重试。';
         });
     }
 
@@ -2589,7 +2837,6 @@ document.addEventListener('DOMContentLoaded', function () {
         stopPolling();
         var tbody = document.getElementById('task-table-body');
         var empty = document.getElementById('task-table-empty');
-        var pagination = document.getElementById('task-pagination');
         var countInfo = document.getElementById('task-count-info');
         if (!tbody) return;
 
@@ -2620,7 +2867,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (tasks.length === 0) {
                 tbody.innerHTML = '';
                 if (empty) empty.style.display = '';
-                if (pagination) pagination.style.display = 'none';
+                renderTaskPagination(total, totalPages);
                 return;
             }
 
@@ -2709,20 +2956,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // ── 任务列表分页 ──
     function renderTaskPagination(total, totalPages) {
         var pag = document.getElementById('task-pagination');
-        var pageInfo = document.getElementById('page-info-text');
         var pageNum = document.getElementById('page-num-text');
         var prevBtn = document.getElementById('page-prev');
         var nextBtn = document.getElementById('page-next');
 
         if (!pag) return;
 
-        if (totalPages <= 1) {
-            pag.style.display = 'none';
-            return;
-        }
         pag.style.display = '';
 
-        if (pageInfo) pageInfo.textContent = '第 ' + taskPage + ' 页';
         if (pageNum) pageNum.textContent = taskPage + ' / ' + totalPages;
         if (prevBtn) {
             prevBtn.disabled = taskPage <= 1;

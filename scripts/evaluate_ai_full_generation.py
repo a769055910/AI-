@@ -197,13 +197,11 @@ def evaluate(manifests: list[Path], output: Path, gpu_api: str, max_side: int) -
                 "fusion_mode": combined["fusion_mode"],
                 "npr_score": f"{combined['npr_score']:.4f}",
                 "univfd_score": combined["univfd_ai_score"],
-                "aide_score": combined["aide_ai_score"],
-                "dear_r_score": combined["dear_r_ai_score"],
                 "probe_score": combined["probe_ai_score"],
                 "error": "",
             }
         except Exception as exc:  # Preserve failed rows; do not silently inflate metrics.
-            result = {**sample, "evaluated_max_side": str(max_side), "final_score": "", "final_verdict": "检测失败", "fusion_mode": "", "npr_score": "", "univfd_score": "", "aide_score": "", "dear_r_score": "", "probe_score": "", "error": str(exc)[:300]}
+            result = {**sample, "evaluated_max_side": str(max_side), "final_score": "", "final_verdict": "检测失败", "fusion_mode": "", "npr_score": "", "univfd_score": "", "probe_score": "", "error": str(exc)[:300]}
         results.append(result)
         if index == 1 or index == len(samples) or index % 10 == 0 or result["error"]:
             print(f"[{index}/{len(samples)}] {image_path.name}: {result['final_verdict']} {result['final_score']} {result['error']}")

@@ -1,0 +1,407 @@
+[
+  {
+    "candidate_id": "doubao_23",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao23.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao23.png"
+  },
+  {
+    "candidate_id": "doubao_21",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao21.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao21.png"
+  },
+  {
+    "candidate_id": "doubao_22",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao22.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao22.png"
+  },
+  {
+    "candidate_id": "doubao_20",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao20.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao20.png"
+  },
+  {
+    "candidate_id": "doubao_25",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao25.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao25.png"
+  },
+  {
+    "candidate_id": "doubao_26",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao26.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao26.png"
+  },
+  {
+    "candidate_id": "doubao_27",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao27.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao27.png"
+  },
+  {
+    "candidate_id": "doubao_28",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao28.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao28.png"
+  },
+  {
+    "candidate_id": "doubao_36",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao36.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao36.png"
+  },
+  {
+    "candidate_id": "doubao_37",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao37.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao37.png"
+  },
+  {
+    "candidate_id": "doubao_38",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao38.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao38.png"
+  },
+  {
+    "candidate_id": "doubao_41",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao41.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao41.png"
+  },
+  {
+    "candidate_id": "doubao_39",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao39.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao39.png"
+  },
+  {
+    "candidate_id": "doubao_40-1",
+    "image_url": "https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao40-1.png",
+    "reason": "download_failed: 567 Server Error: Unknown Status for url: https://ai-bot.cn/wp-content/uploads/2025/05/the-measured-dou-bao40-1.png"
+  },
+  {
+    "candidate_id": "jimeng_8",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/a9f6bc72j00t2ews6005wd000u00140m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_10",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/c27d4044j00t2ews60063d000u00140m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_11",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/c10589adj00t2ews6003bd000u00190m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_13",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/8f1ee27fj00t2ews6003jd000u00190m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_16",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/2ff44628j00t2ewsp0238d000u001hcm.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_17",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/3d87cbbaj00t2ewsn01pud000u001hcm.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_19",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/bf43e8cfj00t2ewsq01mgd000u001hcm.jpg",
+    "reason": "quality_rejected: 图片过于模糊，无法可靠检测。请上传清晰原图，避免失焦、严重压缩或二次截图。"
+  },
+  {
+    "candidate_id": "jimeng_26",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/682bfdb1j00t2ewso016ud000u00140m.jpg",
+    "reason": "quality_rejected: 图片过于模糊，无法可靠检测。请上传清晰原图，避免失焦、严重压缩或二次截图。"
+  },
+  {
+    "candidate_id": "jimeng_28",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/440ec5a0j00t2ewsq01rnd000u00190m.jpg",
+    "reason": "quality_rejected: 图片过于模糊，无法可靠检测。请上传清晰原图，避免失焦、严重压缩或二次截图。"
+  },
+  {
+    "candidate_id": "jimeng_29",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/b7777ef1j00t2ewsq02jhd000u001hcm.jpg",
+    "reason": "download_failed: HTTPSConnectionPool(host='www.1ai.net', port=443): Max retries exceeded with url: /wp-content/uploads/2025/09/b7777ef1j00t2ewsq02jhd000u001hcm.jpg (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of pr"
+  },
+  {
+    "candidate_id": "jimeng_30",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/e763b636j00t2ewso01kkd000u00140m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_36",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/ce795bb2j00t2ewsh01erd000mi00u0m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_38",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/4bd29373j00t2ewso01k1d000u00140m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "jimeng_39",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/09/d0cee2a9j00t2ewsk00xvd000u00140m.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "doubao_fashion_5",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/11/1b737886j00t58jxn0012d000ey00aep.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_fashion_6",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/11/9ab04e09j00t58jxw005fd000u00134p.jpg",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "doubao_vlog_7",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/07/8977e6c5j00szw1ct0012d000nk00chp.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_pet_7",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/12/30532b79j00t7eih4001rd000rs00ixp.jpg",
+    "reason": "task_rejected: edited result, not text-to-image"
+  },
+  {
+    "candidate_id": "doubao_cartoon_0",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/47883d50j00suuzn9001ad000oj009gp.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_cartoon_1",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/a15978faj00suuznp001bd000oa009ap.jpg",
+    "reason": "download_failed: HTTPSConnectionPool(host='www.1ai.net', port=443): Max retries exceeded with url: /wp-content/upload"
+  },
+  {
+    "candidate_id": "doubao_cartoon_2",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/a9596addj00suuzoe001md000oq009ip.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_cartoon_5",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/42ecf138j00suuzpq003ad000tu00ovp.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_cartoon_8",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/44e6b414j00suuzqm0017d000s200j0p.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_cartoon_9",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/04/ed4c0560j00suuzqx0033d000u000oup.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_plant_3",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/08/ab7c80e1j00t0rgqn010fd000u000kwm.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_plant_4",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/08/d26745eaj00t0rgql001nd000nq00ajm.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_plant_5",
+    "image_url": "https://www.1ai.net/wp-content/uploads/2025/08/f416c6d3j00t0rgql0038d000u000qom.jpg",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_3",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/5dd178525295dd5f41a1618d2a68ac04.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_4",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/c35c18028a0bc7ba7e140c49eeb18c40.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_5",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/987dba1d1765f9d18e71a12295679ca8.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_6",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/4fae75fc5d345659eb7047e8f4fd56fe.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_7",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/c8afb77398e840f468368680e3f0ccc1.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_8",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/b0f48e29412e8748835f5f7e712859e5.png",
+    "reason": "quality_rejected: 上传图像最小尺寸不小于 300px（当前 500 × 299）。"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_9",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/7a969b9156066db1912538d0677fd63f.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_10",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/2909b6c53dff5f9bb60a1adaef63da43.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_11",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/d14c90abfdd6dba8ef0ecaca6978d3e3.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_12",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/2e13e445c571cc33eeebba9282e4dd34.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_13",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/9b40374b6d1cf6b4531178e2eb603c82.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_14",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/2610eea67ddecba0e840b670afd9d50c.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_15",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/c6323c647dd12b9021476a14e5361228.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_16",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/a25e523511d115834dd33d3646b08c12.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_17",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/1f652b9a03f398a70250ae2b9c29e91b.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_23",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/640-2.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_24",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/640-3.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_25",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/640-5.png",
+    "reason": "visual_rejected: article screenshot or comparison/montage"
+  },
+  {
+    "candidate_id": "doubao_meiweihui_26",
+    "image_url": "https://ai.meiweihui.cn/wp-content/uploads/2025/06/640-4.png",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_14",
+    "image_url": "https://picx.zhimg.com/80/v2-33b5cea308d45ebfaa18f5b81647cece_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_16",
+    "image_url": "https://pica.zhimg.com/80/v2-b321224ad412093e370f021fffdc53f9_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_18",
+    "image_url": "https://pic1.zhimg.com/80/v2-6304812a7499b5d4ad3095d4b50e883c_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_19",
+    "image_url": "https://pica.zhimg.com/80/v2-fdf8d3079c07fde7fb8d8b5fdc2ea093_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_20",
+    "image_url": "https://pic1.zhimg.com/80/v2-123ff599b8c137286726e644eee86b18_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_21",
+    "image_url": "https://picx.zhimg.com/80/v2-c470ec1c0a4895fba0130e8b0949fdcd_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_22",
+    "image_url": "https://pic1.zhimg.com/80/v2-bda182b4fa63fde073540af7886e9083_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_23",
+    "image_url": "https://picx.zhimg.com/80/v2-8bfd08e8aa42e1f5c9a09c2921b08ab8_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_44",
+    "image_url": "https://picx.zhimg.com/80/v2-6a481da091b6cb2dae7176c65cbda1f2_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_45",
+    "image_url": "https://picx.zhimg.com/80/v2-597384f6afbb8d499e68c959b885fe0f_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_46",
+    "image_url": "https://picx.zhimg.com/80/v2-1332bb11957b3ec7c0bce218f2ce4215_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_47",
+    "image_url": "https://picx.zhimg.com/80/v2-ed18fc6292a4abf6e520c8c800f42c83_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_48",
+    "image_url": "https://picx.zhimg.com/80/v2-35cdd63dada33d35e96d08733c9dacfa_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_49",
+    "image_url": "https://picx.zhimg.com/80/v2-d82aa5bbbf29ec932e1079c15d7a016c_720w.webp",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "doubao_aitnt_50",
+    "image_url": "https://pic1.zhimg.com/80/v2-6dc3833e02435ad977c24a527b35e62d_720w.webp",
+    "reason": "not_selected: balanced 10 samples per platform; other valid candidates retained in temporary cache"
+  },
+  {
+    "candidate_id": "doubao_aitnt_51",
+    "image_url": "https://picx.zhimg.com/80/v2-b33a356534f87ad53818763e5575fe55_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_aitnt_52",
+    "image_url": "https://picx.zhimg.com/80/v2-b52c9b42f3f864e470821c76f0471891_720w.webp",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_full_46",
+    "image_url": "https://picx.zhimg.com/v2-1332bb11957b3ec7c0bce218f2ce4215_r.jpg",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_full_47",
+    "image_url": "https://picx.zhimg.com/v2-ed18fc6292a4abf6e520c8c800f42c83_r.jpg",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_full_51",
+    "image_url": "https://picx.zhimg.com/v2-b33a356534f87ad53818763e5575fe55_r.jpg",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  },
+  {
+    "candidate_id": "doubao_full_52",
+    "image_url": "https://picx.zhimg.com/v2-b52c9b42f3f864e470821c76f0471891_r.jpg",
+    "reason": "quality_rejected: 图片文件大小不能小于 30 KB，请上传清晰原图。"
+  }
+]

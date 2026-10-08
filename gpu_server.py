@@ -3,7 +3,6 @@
 AutoDL GPU 推理服务
 三路基础检测 + 专项模型：
   - UniversalFakeDetect / UnivFD (CLIP ViT-L/14) → 跨生成器 AI 全图生成检测
-  - AIDE (ICLR 2025, GenImage checkpoint) → 伪影 + DCT 噪声特征检测
   - Ateeqq/ai-vs-human-image-detector    (SigLIP2, 保留未使用)
   - prithivMLmods/Deep-Fake-Detector-v2-Model (ViT-B, 92.12% 准确率) → 深度伪造检测
 
@@ -46,10 +45,6 @@ DEEPFAKE_MODEL_ID   = "prithivMLmods/Deep-Fake-Detector-v2-Model"
 UNIVFD_CLIP_ARCH    = "ViT-L/14"
 UNIVFD_WEIGHTS_URL  = "https://raw.githubusercontent.com/WisconsinAIVision/UniversalFakeDetect/main/pretrained_weights/fc_weights.pth"
 UNIVFD_WEIGHTS_PATH = os.path.join(MODEL_CACHE, "univfd", "fc_weights.pth")
-AIDE_ROOT           = os.environ.get("AIDE_ROOT", "/root/forge-detector/vendor/AIDE")
-AIDE_CHECKPOINT     = os.environ.get("AIDE_CHECKPOINT", "/root/forge-detector/models/aide/GenImage_train.pth")
-DEAR_ROOT           = os.environ.get("DEAR_ROOT", "/root/forge-detector/vendor/dear")
-DEAR_R_CHECKPOINT   = os.environ.get("DEAR_R_CHECKPOINT", "/root/forge-detector/models/dear/dear_r/model_best.pth")
 PROBE_DINO_MODEL_ID = "facebook/dinov2-with-registers-large"
 PROBE_CHECKPOINT    = os.environ.get("PROBE_CHECKPOINT", "/root/forge-detector/models/probe/DINOv2_best_model_step_34999.pth")
 TRUFOR_ROOT         = os.environ.get("TRUFOR_ROOT", "/root/forge-detector/vendor/TruFor/TruFor_train_test")
@@ -370,111 +365,8 @@ class UnivFDDetector:
         }
 
 
-class AIDEDetector:
-    """AIDE（ICLR 2025）官方实现，使用 GenImage 训练的完整 checkpoint 做单图推理。"""
-    def __init__(self):
-        if not os.path.isfile(AIDE_CHECKPOINT):
-            raise FileNotFoundError(f"未找到 AIDE checkpoint: {AIDE_CHECKPOINT}")
-        if not os.path.isdir(AIDE_ROOT):
-            raise FileNotFoundError(f"未找到 AIDE 官方代码目录: {AIDE_ROOT}")
-
-        print(f"[AIDEDetector] loading checkpoint: {AIDE_CHECKPOINT} ...")
-        if AIDE_ROOT not in sys.path:
-            sys.path.insert(0, AIDE_ROOT)
-
-        from torchvision import transforms
-        import models.AIDE as aide_model
-        from data.dct import DCT_base_Rec_Module
-
-        # checkpoint 已包含 AIDE 的 ResNet 与 OpenCLIP ConvNeXt-XXLarge 全部参数；
-        # 先以空预训练骨干构建，再使用安全的 weights_only 模式恢复官方权重。
-        self.model = aide_model.AIDE(resnet_path=None, convnext_path=None)
-        try:
-            checkpoint = torch.load(AIDE_CHECKPOINT, map_location="cpu", weights_only=True)
-        except TypeError:  # 兼容较早版本 PyTorch
-            checkpoint = torch.load(AIDE_CHECKPOINT, map_location="cpu")
-        state_dict = checkpoint.get("model", checkpoint)
-        missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
-        if missing or unexpected:
-            raise RuntimeError(
-                f"AIDE checkpoint 与官方模型不匹配: missing={missing[:5]}, unexpected={unexpected[:5]}"
-            )
-
-        self.model.to(device).eval()
-        self.dct = DCT_base_Rec_Module()
-        self.to_tensor = transforms.ToTensor()
-        self.normalize = transforms.Compose([
-            transforms.Resize([256, 256]),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        print("[AIDEDetector] loaded.")
-
-    def predict(self, image: Image.Image):
-        # 严格复用官方 TestDataset：ToTensor → DCT 四路重建 → Resize/Normalize → 五路堆叠。
-        source = self.to_tensor(image.convert("RGB"))
-        x_minmin, x_maxmax, x_minmin1, x_maxmax1 = self.dct(source)
-        sample = torch.stack([
-            self.normalize(x_minmin), self.normalize(x_maxmax),
-            self.normalize(x_minmin1), self.normalize(x_maxmax1), self.normalize(source),
-        ], dim=0).unsqueeze(0).to(device)
-        with torch.inference_mode():
-            probabilities = torch.softmax(self.model(sample), dim=1)[0].float().cpu().numpy()
-
-        # 官方数据集标签：0 = 真实图片，1 = AI 生成图片。
-        human_score = float(probabilities[0])
-        ai_score = float(probabilities[1])
-        return {
-            "label": "AIDE (GenImage)",
-            "ai_score": round(ai_score, 4),
-            "human_score": round(human_score, 4),
-            "verdict": "疑似AI生成" if ai_score >= 0.5 else "疑似真实图片",
-            "is_ai": ai_score >= 0.5,
-            "available": True,
-        }
 
 
-class DEARRDetector:
-    """DEAR-r（ICML 2026）官方权重：针对压缩、缩放等后处理增强鲁棒性。"""
-    def __init__(self):
-        if not os.path.isfile(DEAR_R_CHECKPOINT):
-            raise FileNotFoundError(f"未找到 DEAR-r checkpoint: {DEAR_R_CHECKPOINT}")
-        if not os.path.isdir(DEAR_ROOT):
-            raise FileNotFoundError(f"未找到 DEAR 官方代码目录: {DEAR_ROOT}")
-
-        print(f"[DEARRDetector] loading checkpoint: {DEAR_R_CHECKPOINT} ...")
-        if DEAR_ROOT not in sys.path:
-            sys.path.insert(0, DEAR_ROOT)
-        from torchvision import transforms
-        from dear.detector.rajan_mask_gated_detector import RajanMaskGatedDetector
-
-        self.model = RajanMaskGatedDetector(device=str(device))
-        self.model.load(DEAR_R_CHECKPOINT)
-        self.model.eval()
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        print("[DEARRDetector] loaded.")
-
-    def predict(self, image: Image.Image):
-        # 官方单图流程保持原始分辨率，不做固定裁剪；过大图像仅作安全缩放以避免占满显存。
-        source = image.convert("RGB")
-        max_side = max(source.size)
-        if max_side > 1536:
-            scale = 1536.0 / max_side
-            source = source.resize((round(source.width * scale), round(source.height * scale)), Image.Resampling.LANCZOS)
-        x = self.transform(source).unsqueeze(0).to(device)
-        with torch.inference_mode():
-            logit = self.model.predict(x).squeeze()
-            ai_score = float(torch.sigmoid(logit).item())
-        return {
-            "label": "DEAR-r",
-            "ai_score": round(ai_score, 4),
-            "human_score": round(1.0 - ai_score, 4),
-            "verdict": "疑似AI生成" if ai_score >= 0.5 else "疑似真实图片",
-            "is_ai": ai_score >= 0.5,
-            "available": True,
-        }
 
 
 class PROBEDinoV2Detector:
@@ -635,8 +527,6 @@ _threeway   = None
 _aihuman    = None
 _deepfakev2 = None
 _univfd     = None
-_aide       = None
-_dear_r     = None
 _probe_dinov2 = None
 
 
@@ -668,18 +558,8 @@ def get_univfd():
     return _univfd
 
 
-def get_aide():
-    global _aide
-    if _aide is None:
-        _aide = AIDEDetector()
-    return _aide
 
 
-def get_dear_r():
-    global _dear_r
-    if _dear_r is None:
-        _dear_r = DEARRDetector()
-    return _dear_r
 
 
 def get_probe_dinov2():
@@ -700,10 +580,10 @@ def release_models_for_trufor():
     if not TRUFOR_RELEASE_GPU_MODELS:
         return []
 
-    global _threeway, _aihuman, _deepfakev2, _univfd, _aide, _dear_r, _probe_dinov2
+    global _threeway, _aihuman, _deepfakev2, _univfd, _probe_dinov2
     cache_names = (
         "_threeway", "_aihuman", "_deepfakev2", "_univfd",
-        "_aide", "_dear_r", "_probe_dinov2",
+        "_probe_dinov2",
     )
     released = []
     for cache_name in cache_names:
@@ -1353,8 +1233,6 @@ def detect():
 
     # ── UniversalFakeDetect 专项检测（跨生成器 AI 全图生成）──
     univfd = None
-    aide = None
-    dear_r = None
     probe_dinov2 = None
     if "ai_generated" in selected_models:
         try:
@@ -1365,23 +1243,7 @@ def detect():
                       "human_score": None, "verdict": "检测不可用", "is_ai": False,
                       "available": False, "error": str(e)}
 
-    # ── AIDE 专项检测（ICLR 2025，伪影 + DCT 噪声特征）──
-        try:
-            aide = get_aide().predict(image)
-        except Exception as e:
-            print(f"[ERROR] AIDE检测失败: {e}")
-            aide = {"label": "AIDE (GenImage)", "ai_score": None,
-                    "human_score": None, "verdict": "检测不可用", "is_ai": False,
-                    "available": False, "error": str(e)}
 
-    # ── DEAR-r 专项检测（ICML 2026，后处理鲁棒性）──
-        try:
-            dear_r = get_dear_r().predict(image)
-        except Exception as e:
-            print(f"[ERROR] DEAR-r检测失败: {e}")
-            dear_r = {"label": "DEAR-r", "ai_score": None,
-                      "human_score": None, "verdict": "检测不可用", "is_ai": False,
-                      "available": False, "error": str(e)}
 
     # ── PROBE-DINOv2 专项检测（ICML 2026，未见生成器泛化）──
         try:
@@ -1418,8 +1280,6 @@ def detect():
             "specialized_models": {
                 "ai_vs_human": aihuman,
                 "univfd": univfd,
-                "aide": aide,
-                "dear_r": dear_r,
                 "probe_dinov2": probe_dinov2,
                 "deepfake_detector": deepfakev2,
             }
@@ -1448,21 +1308,9 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"[Startup] UnivFD 预加载失败（不影响其他检测链路）: {e}")
 
-        print("[Startup] 预加载 AIDE（GenImage checkpoint，约 3.4GB）...")
         _sys.stdout.flush()
-        try:
-            get_aide()
-            print("[Startup] AIDE 模型加载完成")
-        except Exception as e:
-            print(f"[Startup] AIDE 预加载失败（不影响其他检测链路）: {e}")
 
-        print("[Startup] 预加载 DEAR-r（ICML 2026，约 90MB）...")
         _sys.stdout.flush()
-        try:
-            get_dear_r()
-            print("[Startup] DEAR-r 模型加载完成")
-        except Exception as e:
-            print(f"[Startup] DEAR-r 预加载失败（不影响其他检测链路）: {e}")
 
         print("[Startup] 预加载 PROBE-DINOv2（ICML 2026，约 1.2GB）...")
         _sys.stdout.flush()
